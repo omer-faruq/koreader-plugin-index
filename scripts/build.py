@@ -146,8 +146,14 @@ def build_plugin(node, curation):
         "url": node["url"],
         "description": description,
         "purpose": extract.extract_purpose(readme),
+        # Deliberately without body_terms. Feeding them in took `misc` from 33%
+        # to 9%, but tagged 49% of the catalogue `ui` and 46% `files`: every
+        # README says "copy the files" somewhere, and a chip matching half the
+        # catalogue tells a reader nothing. Categories come from the fields
+        # that state identity; body terms stay in keywords, where breadth is
+        # exactly what search wants.
         "categories": extract.categorise(
-            " ".join([description] + headings + body_terms), topics, node["name"]
+            " ".join([description] + headings), topics, node["name"]
         ),
         "keywords": extract.keywords(description, topics, headings, extra=body_terms),
         "topics": topics,
