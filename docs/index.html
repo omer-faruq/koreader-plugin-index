@@ -52,6 +52,10 @@
 }
 
 * { box-sizing: border-box; }
+/* A `display` rule on a class outranks the browser's own [hidden] rule, so
+   `.panel-grid label { display: flex }` kept hidden fields on screen. Anything
+   set to hidden in script has to actually disappear. */
+[hidden] { display: none !important; }
 body {
   margin: 0;
   background: var(--bg);
@@ -129,6 +133,8 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
 }
 #aiQuestion:focus { outline: none; border-color: var(--accent); }
 .kbd-hint { font-size: .76rem; color: var(--muted); }
+.field-hint { font-size: .74rem; color: var(--muted); line-height: 1.4; }
+.field-hint code { background: var(--surface-2); padding: 1px 4px; border-radius: 3px; }
 .modal-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; font-size: .82rem; color: var(--muted); }
 #aiOut:not(:empty) { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 14px; }
 
@@ -312,7 +318,13 @@ footer a { color: var(--accent); }
           </select>
         </label>
         <label>Model <input id="aiModel" type="text" autocomplete="off"></label>
-        <label class="wide" id="aiUrlWrap" hidden>API URL <input id="aiUrl" type="text" autocomplete="off"></label>
+        <label class="wide" id="aiUrlWrap" hidden>
+          API URL
+          <input id="aiUrl" type="text" autocomplete="off">
+          <span class="field-hint">The full chat-completions endpoint, not just the host —
+            usually your base URL plus <code>/v1/chat/completions</code>. Anything
+            speaking the OpenAI format works, including a local server.</span>
+        </label>
         <label class="wide">API key <input id="aiKey" type="password" autocomplete="off" placeholder="stored in this browser"></label>
       </div>
       <div class="panel-actions">
