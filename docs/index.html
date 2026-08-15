@@ -1506,7 +1506,24 @@ function setupAI() {
   });
   showTuning();
 
-  $("aiProvider").addEventListener("change", fill);
+  // One key is stored, for the provider in use. Keeping one per provider would
+  // multiply what sits in this browser, and the panel above promises the
+  // opposite -- it tells readers a shared machine can recover the key and to
+  // press Forget key when done, which stops meaning anything if there are
+  // several and the button is ambiguous about which it forgets.
+  //
+  // What did need fixing: changing provider left the previous key in the field,
+  // so saving stored a DeepSeek key against OpenAI and the 401 that followed
+  // looked like a bad key rather than the wrong service's key.
+  $("aiProvider").addEventListener("change", () => {
+    fill();
+    const saved = aiConfig();
+    if (saved && saved.provider !== $("aiProvider").value && $("aiKey").value === saved.key) {
+      $("aiKey").value = "";
+      $("aiModel").value = "";
+      say(`Enter the key for ${$("aiProvider").value}.`);
+    }
+  });
   $("aiSettingsToggle").addEventListener("click", () => { $("aiPanel").hidden = !$("aiPanel").hidden; });
   $("aiSave").addEventListener("click", () => {
     const next = {
