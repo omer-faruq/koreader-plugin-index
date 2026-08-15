@@ -121,6 +121,9 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
   font-size: .89rem;
 }
 .note b { display: block; margin-bottom: 3px; }
+/* A distinction is guidance, not a hazard. Only the patch caution stays
+   amber; telling two similar plugins apart is neutral information. */
+.note.info { background: var(--surface-2); border-color: var(--border); }
 
 .card {
   background: var(--surface); border: 1px solid var(--border);
@@ -389,11 +392,15 @@ function card(entry, tokens) {
 
 /* Distinctions are the part of the catalogue a README cannot produce. They are
    surfaced exactly when two entries that look alike are both on screen. */
-function noteFor(shown) {
-  const ids = new Set(shown.map(e => e.id));
+function noteFor(shown, tokens) {
+  // Only while someone is actually choosing between the two. Without a query
+  // the listing leads with the curated set, so every pair was on screen at
+  // once and all four notes fired before the reader had asked anything.
+  if (!tokens.length) return "";
+  const ids = new Set(shown.slice(0, 8).map(e => e.id));
   return (state.index.distinctions || [])
     .filter(d => (d.between || []).filter(x => ids.has(x)).length >= 2)
-    .map(d => `<div class="note"><b>These look alike, and are not</b>${esc(d.say)}</div>`)
+    .map(d => `<div class="note info"><b>Similar, but not the same</b>${esc(d.say)}</div>`)
     .join("");
 }
 
@@ -431,7 +438,7 @@ function render() {
        rather than adding a plugin, so one written for an older KOReader can break
        after an update. Prefer a plugin when one does the same job.</div>`
     : "";
-  $("notes").innerHTML = warning + (list.length ? noteFor(list) : "");
+  $("notes").innerHTML = warning + (list.length ? noteFor(list, tokens) : "");
 
   if (!list.length) {
     $("results").innerHTML = `<div class="state">
