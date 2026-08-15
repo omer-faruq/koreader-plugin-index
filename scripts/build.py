@@ -42,9 +42,24 @@ PUBLISHED_INDEX = "https://omer-faruq.github.io/koreader-plugin-index/index.json
 # another plugin -- assistant.koplugin (574 stars), rakuyomi (505) and
 # localsend.koplugin (255) are all forks, and all three were missing from the
 # index entirely until this was added.
+# Two passes per discovery surface, because GitHub cannot express "non-forks,
+# plus forks somebody starred" in a single query:
+#
+#   bare query      -> non-forks only, which is GitHub's default
+#   fork:only ...   -> forks, restricted to those with at least one star
+#
+# Both halves are needed. Forks are excluded by default, and in this ecosystem
+# plugins routinely start as a fork -- assistant.koplugin (574 stars),
+# rakuyomi (505) and localsend.koplugin (255) are all forks and were missing
+# from the index entirely. But `fork:true` overshoots: it pulled the name query
+# from 572 repositories to 1456, almost all of them unstarred copies that tier
+# C would hide anyway, at the cost of a README fetch each. Requiring a star is
+# the same line the AppStore page draws by default with `zeroStarForks: false`.
 PLUGIN_QUERIES = [
-    "topic:koreader-plugin fork:true",
-    'in:name ".koplugin" fork:true',
+    "topic:koreader-plugin",
+    "topic:koreader-plugin fork:only stars:>=1",
+    'in:name ".koplugin"',
+    'in:name ".koplugin" fork:only stars:>=1',
 ]
 
 
