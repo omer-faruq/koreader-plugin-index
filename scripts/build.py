@@ -31,6 +31,7 @@ SCHEMA_VERSION = 2
 SOURCE_REPO = "https://github.com/omer-faruq/koreader-plugin-index"
 PUBLISHED_INDEX = "https://omer-faruq.github.io/koreader-plugin-index/index.json"
 READMES_URL = "https://omer-faruq.github.io/koreader-plugin-index/readme-index.json"
+PATCHES_URL = "https://omer-faruq.github.io/koreader-plugin-index/patches.json"
 
 # Discovery mirrors the AppStore page's QUERIES.plugins so the index cannot
 # drift from what the plugin itself finds. The quoting matters: `in:name
@@ -313,18 +314,25 @@ def category_summary(entries):
     ]
 
 
-def sanity_check(plugins, previous):
+def sanity_check(plugins, patches, previous, previous_patches):
     """Refuse to publish a catalogue that collapsed.
 
     A bad hour at the GitHub API must not be able to empty the index; the last
     good publish is a better answer than a truncated one.
+
+    Both halves are checked. When this guarded plugins alone, a bug that
+    silently dropped every carried-over patch in diff mode would have shipped:
+    the plugin count was untouched, so nothing objected.
     """
     if not previous:
         return True, ""
-    before = len(previous.get("plugins", []))
-    after = len(plugins)
-    if before and after < before * 0.7:
-        return False, f"plugin count dropped {before} -> {after} (>30%)"
+    checks = [
+        ("plugin", len(previous.get("plugins", [])), len(plugins)),
+        ("patch", len(previous_patches or []), len(patches)),
+    ]
+    for label, before, after in checks:
+        if before and after < before * 0.7:
+            return False, f"{label} count dropped {before} -> {after} (>30%)"
     return True, ""
 
 
@@ -344,9 +352,14 @@ def main():
     started = now_iso()
 
     previous = fetch_url(PUBLISHED_INDEX)
+    # Patches moved out of index.json in schema 2, so their previous state now
+    # lives in its own file. Reading them from the old place returned nothing,
+    # and a diff run would have republished the handful of repositories pushed
+    # that day as the entire patch catalogue.
+    previous_patches = (fetch_url(PATCHES_URL) or {}).get("patches", []) if previous else []
     if previous:
-        print(f"previous index: {len(previous.get('plugins', []))} plugins "
-              f"({previous.get('generated_at')})")
+        print(f"previous index: {len(previous.get('plugins', []))} plugins, "
+              f"{len(previous_patches)} patches ({previous.get('generated_at')})")
     elif args.mode == "diff":
         print("no previous index reachable, falling back to a full build")
         args.mode = "full"
@@ -399,7 +412,7 @@ def main():
     # untouched repos are carried over the same way plugins are.
     if args.mode == "diff" and previous:
         have = {p["id"] for p in patch_entries}
-        for old in previous.get("patches", []):
+        for old in previous_patches:
             if old["id"] not in have:
                 patch_entries.append(old)
         patch_repos = max(patch_repos, previous.get("counts", {}).get("patch_repos", 0))
@@ -407,7 +420,7 @@ def main():
     print(f"  {len(patches)} patch files across {patch_repos} repos "
           f"({patch_repos_seen} matched the search)")
 
-    ok, why = sanity_check(plugins, previous)
+    ok, why = sanity_check(plugins, patches, previous, previous_patches)
     if not ok:
         print(f"ABORT: {why}", file=sys.stderr)
         return 1
