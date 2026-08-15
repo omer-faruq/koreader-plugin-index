@@ -43,6 +43,8 @@ WEIGHT_NAME = 1.5
 # repositories should stay out of the way unless it is all there is.
 TIER_BONUS = {"A": 3.0, "B": 1.0, "C": -2.5}
 
+POPULARITY_WEIGHT = 1.5
+
 QUERY_STOPWORDS = {
     "i", "want", "to", "a", "an", "the", "my", "me", "for", "with", "on", "in",
     "of", "and", "or", "how", "do", "can", "is", "it", "that", "this", "which",
@@ -86,6 +88,23 @@ def tokenise(text):
             if t not in QUERY_STOPWORDS and len(t) > 1]
 
 
+def _wordset(text):
+    words = set(WORD_RE.findall((text or "").lower()))
+    return words, {stem(w) for w in words}
+
+
+def _matches(token, pool):
+    words, stems = pool
+    if token in words or stem(token) in stems:
+        return True
+    if len(token) < MIN_PREFIX:
+        return False
+    return any(
+        word.startswith(token) or (len(word) >= MIN_INDEX_PREFIX and token.startswith(word))
+        for word in words
+    )
+
+
 def _hits(tokens, haystack):
     """Count query tokens present as words, allowing a light prefix match.
 
@@ -113,22 +132,46 @@ def _hits(tokens, haystack):
     return count
 
 
+def fields_of(entry):
+    return [
+        (WEIGHT_KEYWORD, " ".join(entry.get("keywords", []))),
+        (WEIGHT_PURPOSE, entry.get("purpose", "")),
+        (WEIGHT_DESCRIPTION, entry.get("description", "")),
+        (WEIGHT_CATEGORY, " ".join(entry.get("categories", []))),
+        (WEIGHT_NAME, entry.get("repo", "")),
+    ]
+
+
 def score(entry, tokens):
+    """Each query token counts once, scored by the strongest field it matched.
+
+    Summing every field instead counts one word three times over, because the
+    fields overlap by construction: keywords are extracted from the description,
+    and the purpose restates it in prose. On real data that inflated whatever
+    happened to carry the most text -- a panel-zoom plugin outscored the actual
+    manga reader 20.7 to 14.7 purely by repeating two words across three fields.
+    """
     if not tokens:
         return 0.0
+
+    pools = [(weight, _wordset(text)) for weight, text in fields_of(entry)]
     total = 0.0
-    total += WEIGHT_NAME * _hits(tokens, entry.get("repo", ""))
-    total += WEIGHT_KEYWORD * _hits(tokens, " ".join(entry.get("keywords", [])))
-    total += WEIGHT_PURPOSE * _hits(tokens, entry.get("purpose", ""))
-    total += WEIGHT_DESCRIPTION * _hits(tokens, entry.get("description", ""))
-    total += WEIGHT_CATEGORY * _hits(tokens, " ".join(entry.get("categories", [])))
+    for token in tokens:
+        best = 0.0
+        for weight, pool in pools:
+            if weight > best and _matches(token, pool):
+                best = weight
+        total += best
 
     if total <= 0:
         return 0.0
 
     total += TIER_BONUS.get(entry.get("tier", "C"), 0.0)
-    # Popularity breaks ties; it never carries an otherwise irrelevant entry.
-    total += math.log10(max(entry.get("stars", 0), 0) + 1)
+    # With double counting gone, popularity is the main separator between two
+    # plugins that match a query equally well -- and for "which should I
+    # install", it is a real signal. It still cannot carry an entry that
+    # matched nothing.
+    total += POPULARITY_WEIGHT * math.log10(max(entry.get("stars", 0), 0) + 1)
     return total
 
 

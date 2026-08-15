@@ -204,6 +204,7 @@ const APPSTORE = "https://omer-faruq.github.io/appstore.koplugin/";
 // reader, whose name says nothing about manga.
 const WEIGHT = { keyword: 3.5, purpose: 3, description: 2.5, category: 2, name: 1.5 };
 const TIER_BONUS = { A: 3, B: 1, C: -2.5 };
+const POPULARITY_WEIGHT = 1.5;
 const MIN_PREFIX = 4;
 const MIN_INDEX_PREFIX = 3;
 
@@ -247,32 +248,49 @@ function tokenise(text) {
   return words(text).filter(t => t.length > 1 && !STOPWORDS.has(t));
 }
 
-function hits(tokens, haystack) {
-  if (!haystack) return 0;
-  const pool = new Set(words(haystack));
-  const stems = new Set([...pool].map(stem));
-  let n = 0;
-  for (const t of tokens) {
-    if (pool.has(t) || stems.has(stem(t))) { n++; continue; }
-    if (t.length < MIN_PREFIX) continue;
-    for (const w of pool) {
-      if (w.startsWith(t) || (w.length >= MIN_INDEX_PREFIX && t.startsWith(w))) { n++; break; }
-    }
-  }
-  return n;
+function wordset(text) {
+  const w = new Set(words(text));
+  return { words: w, stems: new Set([...w].map(stem)) };
 }
 
+function matches(token, pool) {
+  if (pool.words.has(token) || pool.stems.has(stem(token))) return true;
+  if (token.length < MIN_PREFIX) return false;
+  for (const w of pool.words) {
+    if (w.startsWith(token) || (w.length >= MIN_INDEX_PREFIX && token.startsWith(w))) return true;
+  }
+  return false;
+}
+
+function fieldsOf(entry) {
+  return [
+    [WEIGHT.keyword, (entry.keywords || []).join(" ")],
+    [WEIGHT.purpose, entry.purpose],
+    [WEIGHT.description, entry.description],
+    [WEIGHT.category, (entry.categories || []).join(" ")],
+    [WEIGHT.name, entry.repo]
+  ];
+}
+
+// Each query token counts once, scored by the strongest field it matched.
+// Summing every field counts one word three times over, because the fields
+// overlap by construction: keywords are extracted from the description and the
+// purpose restates it. On real data that let a panel-zoom plugin outscore the
+// actual manga reader purely by repeating two words across three fields.
 function score(entry, tokens) {
   if (!tokens.length) return 0;
+  const pools = fieldsOf(entry).map(([w, text]) => [w, wordset(text)]);
   let s = 0;
-  s += WEIGHT.name * hits(tokens, entry.repo);
-  s += WEIGHT.keyword * hits(tokens, (entry.keywords || []).join(" "));
-  s += WEIGHT.purpose * hits(tokens, entry.purpose);
-  s += WEIGHT.description * hits(tokens, entry.description);
-  s += WEIGHT.category * hits(tokens, (entry.categories || []).join(" "));
+  for (const t of tokens) {
+    let best = 0;
+    for (const [w, pool] of pools) {
+      if (w > best && matches(t, pool)) best = w;
+    }
+    s += best;
+  }
   if (s <= 0) return 0;
   s += TIER_BONUS[entry.tier] ?? 0;
-  s += Math.log10(Math.max(entry.stars || 0, 0) + 1);
+  s += POPULARITY_WEIGHT * Math.log10(Math.max(entry.stars || 0, 0) + 1);
   return s;
 }
 
