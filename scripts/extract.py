@@ -395,6 +395,18 @@ def categorise(text_pool, topics, name=""):
 DORMANT_DAYS = 365
 STUB_README_BYTES = 300
 
+# Silence is not the same as abandonment. A crossword game, a crash-log viewer
+# or a Syncthing launcher can be finished: it does one thing, it works, and
+# there is nothing left to commit. Demoting on the calendar alone hid 31
+# plugins that had nothing else wrong with them, several with real followings.
+#
+# Two things rescue such a plugin: people use it, and it is not so old that
+# KOReader has moved out from under it. Past three years that second point
+# stops holding regardless of stars -- the API has changed too much to assume
+# anything still runs.
+STALE_DAYS = 1095
+ADOPTED_STARS = 10
+
 # Being a fork is not a quality signal in this ecosystem: plugins routinely
 # start as a fork of a template or of another plugin, and three of the most
 # popular ones in the catalogue are forks. What is noise is an *unloved* fork --
@@ -476,6 +488,17 @@ def tier_of(entry, curated_tier=None):
     reasons = []
     unloved_fork = entry.get("is_fork") and entry.get("stars", 0) < FORK_MIN_STARS
 
+    dormant = entry.get("activity") != "active"
+    age = _age_days(entry.get("pushed_at"))
+    settled = (
+        dormant
+        and not entry.get("archived")
+        and entry.get("stars", 0) >= ADOPTED_STARS
+        and entry.get("readme_bytes", 0) >= STUB_README_BYTES
+        and entry.get("has_meta")
+        and (age is None or age <= STALE_DAYS)
+    )
+
     if entry.get("has_meta"):
         reasons.append("has_meta")
     else:
@@ -484,7 +507,7 @@ def tier_of(entry, curated_tier=None):
         reasons.append("fork")
     if entry.get("archived"):
         reasons.append("archived")
-    reasons.append(entry.get("activity", "dormant"))
+    reasons.append("settled" if settled else entry.get("activity", "dormant"))
     if entry.get("readme_bytes", 0) >= STUB_README_BYTES:
         reasons.append("documented")
     else:
@@ -497,7 +520,7 @@ def tier_of(entry, curated_tier=None):
         not entry.get("has_meta")
         or unloved_fork
         or entry.get("archived")
-        or entry.get("activity") != "active"
+        or (dormant and not settled)
         or entry.get("readme_bytes", 0) < STUB_README_BYTES
     )
     return ("C" if demoted else "B"), reasons

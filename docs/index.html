@@ -284,6 +284,7 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
 .badge.tier-A { color: var(--tier-a); border-color: var(--tier-a); font-weight: 600; }
 .badge.tier-B { color: var(--tier-b); border-color: var(--tier-b); }
 .badge.tier-C { color: var(--tier-c); border-color: var(--tier-c); }
+.badge-settled { color: var(--tier-c); }
 .why { color: var(--muted); font-size: .8rem; margin-left: auto; }
 .why span { color: var(--accent); }
 
@@ -1089,6 +1090,9 @@ function card(entry, tokens) {
     }</p>
     <div class="badges">
       <span class="badge tier-${esc(entry.tier)}">${esc(tierLabel(entry))}</span>
+      ${(entry.tier_reasons || []).includes("settled")
+        ? `<span class="badge badge-settled" title="No commits in over a year. Plenty of small plugins are simply finished, so this is shown rather than hidden.">no recent changes</span>`
+        : ""}
       <span class="badge">★ ${stars ?? 0}</span>
       ${patch && entry.order != null ? `<span class="badge">load order ${entry.order}</span>` : ""}
       ${(entry.categories || []).map(c => `<span class="badge">${esc(c)}</span>`).join("")}
