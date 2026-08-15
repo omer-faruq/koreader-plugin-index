@@ -1,4 +1,4 @@
-# `index.json` schema (v1)
+# `index.json` schema (v2)
 
 The published index is the contract between one producer and several consumers.
 Changing it later is the most expensive edit in this project, so it is versioned
@@ -16,7 +16,8 @@ scripts/build.py  ──►  index.json  ──►  docs/index.html      (search
 
 | File | Consumer | Notes |
 | --- | --- | --- |
-| `docs/index.json` | search page | Full entries, no long prose. Target < 500 KB. |
+| `docs/index.json` | search page | Plugins only. Full entries, no long prose. |
+| `docs/patches.json` | search page, on tab open | Patch entries. Split out in schema 2 — inlined, index.json passed a megabyte. |
 | `docs/detail/<owner>__<repo>.json` | search page, on demand | README-derived long text. |
 | `docs/readme-index.json` | search page, opt-in | Condensed README text per plugin, for deep search. ~1 MB, lazily loaded. |
 | `docs/index.min.json` | device (Lua) | Reserved for phase 6. Same entry shape, fewer fields. |
@@ -38,7 +39,7 @@ version bump. `schema` increments only on a removal or a meaning change.
     { "id": "sync", "label": "Sync", "count": 24 }
   ],
   "plugins": [],
-  "patches": []
+  "patches_url": "patches.json"
 }
 ```
 
@@ -47,8 +48,11 @@ display it — the index is deliberately stale between weekly runs, and saying s
 turns a discrepancy against the live GitHub catalogue into transparency rather
 than a bug.
 
-`plugins` and `patches` are separate arrays and must never be concatenated into
-one result list. A patch monkey-patches KOReader core; a plugin does not. They
+`counts` covers both files, so a consumer can show totals without fetching
+patches. `patches_url` points at the separate file; follow it only when patches
+are actually needed.
+
+Plugins and patches must never be concatenated into one result list. A patch monkey-patches KOReader core; a plugin does not. They
 carry different risk and are recommended under different rules.
 
 ## Plugin entry

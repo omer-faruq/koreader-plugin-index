@@ -27,7 +27,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 DOCS = ROOT / "docs"
 DETAIL = DOCS / "detail"
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 SOURCE_REPO = "https://github.com/omer-faruq/koreader-plugin-index"
 PUBLISHED_INDEX = "https://omer-faruq.github.io/koreader-plugin-index/index.json"
 READMES_URL = "https://omer-faruq.github.io/koreader-plugin-index/readme-index.json"
@@ -425,13 +425,20 @@ def main():
         "categories": category_summary(plugins + patches),
         "distinctions": curation["distinctions"],
         "plugins": plugins,
-        # Separate array on purpose. A patch monkey-patches KOReader core and a
-        # plugin does not, so the two carry different risk and are never merged
-        # into one result list.
-        "patches": patches,
+        # Patches live in their own file from schema 2 on. Inlining them took
+        # index.json past a megabyte, and the patches tab is opt-in the same
+        # way deep search is -- most visitors never open it, and the device
+        # should not pay for it on every refresh.
+        "patches_url": "patches.json",
     }
 
     size = write_json(out_dir / "index.json", index)
+    patch_size = write_json(out_dir / "patches.json", {
+        "schema": SCHEMA_VERSION,
+        "generated_at": started,
+        "counts": {"patches": len(patches), "patch_repos": patch_repos},
+        "patches": patches,
+    })
 
     # Kept out of index.json deliberately. Inlining 740 condensed READMEs would
     # multiply the file the device downloads on every refresh, for a search
@@ -461,7 +468,7 @@ def main():
     for entry in patches:
         ptiers[entry["tier"]] = ptiers.get(entry["tier"], 0) + 1
     no_header = sum(1 for e in patches if not e["purpose"])
-    print(f"  patches   {len(patches)} in {patch_repos} repos")
+    print(f"  patches   {len(patches)} in {patch_repos} repos ({patch_size/1024:.0f} KB)")
     print(f"    tiers   " + "  ".join(f"{k}:{v}" for k, v in sorted(ptiers.items())))
     print(f"    no doc  {no_header}")
     print(f"  requests  {client.requests}  (rate limit left: {client.remaining})")

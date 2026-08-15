@@ -499,12 +499,31 @@ async function boot() {
   renderChips();
 
   $("tabs").querySelectorAll(".tab").forEach(button => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
       state.tab = button.dataset.tab;
       state.category = null;
       $("tabs").querySelectorAll(".tab").forEach(b =>
         b.setAttribute("aria-pressed", String(b.dataset.tab === state.tab)));
       $("chips").querySelectorAll(".chip").forEach(c => c.setAttribute("aria-pressed", "false"));
+
+      // Patches ship separately and load on first use, so the common case --
+      // someone looking for a plugin -- never downloads them.
+      if (state.tab === "patches" && !state.index.patches.length) {
+        $("results").innerHTML = `<div class="state">Loading patches…</div>`;
+        try {
+          const url = state.index.patches_url || "patches.json";
+          const resp = await fetch(url, { cache: "no-cache" });
+          if (!resp.ok) throw new Error(resp.status);
+          state.index.patches = (await resp.json()).patches || [];
+        } catch (err) {
+          $("results").innerHTML = `<div class="state">
+            Could not load patches (${esc(err.message)}).<br>
+            Browse them on the
+            <a href="${APPSTORE}?tab=patches" target="_blank" rel="noopener">AppStore page</a>.
+          </div>`;
+          return;
+        }
+      }
       render();
     });
   });
