@@ -63,6 +63,27 @@ query($q: String!) {
 }
 """
 
+# Patch files are fetched a repository at a time, aliasing every file into one
+# query. A repo with fourteen patches then costs one request instead of
+# fourteen. Each file needs two things: the blob, and the date of the last
+# commit that touched *that path* -- for a patch, staleness is a safety signal
+# and a repo-level date hides it, since one active repo can hold a patch that
+# has been dead for two years.
+FILES_QUERY_HEAD = """
+query($owner: String!, $name: String!) {
+  rateLimit { remaining resetAt }
+  repository(owner: $owner, name: $name) {
+"""
+
+FILES_QUERY_TAIL = """
+  }
+}
+"""
+
+
+def _gql_string(value):
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
 
 class RateLimited(Exception):
     pass
@@ -178,6 +199,50 @@ class Client:
             sub = f"{query} created:{year}-01-01..{year}-12-31"
             if self.count(sub):
                 yield from self._page_all(sub)
+
+    # ------------------------------------------------------------------- files
+
+    def fetch_files(self, owner, name, paths, batch=20):
+        """Blob text plus last-commit date for each path, keyed by path.
+
+        Batched because a single query with sixty aliases is both slow and
+        easy for GitHub to reject; twenty files per request stays comfortable.
+        """
+        result = {}
+        for start in range(0, len(paths), batch):
+            chunk = paths[start:start + batch]
+            parts = []
+            for i, path in enumerate(chunk):
+                literal = _gql_string(f"HEAD:{path}")
+                parts.append(
+                    f'    f{i}: object(expression: {literal}) '
+                    f'{{ ... on Blob {{ text byteSize oid }} }}'
+                )
+                parts.append(
+                    f'    h{i}: defaultBranchRef {{ target {{ ... on Commit {{ '
+                    f'history(first: 1, path: {_gql_string(path)}) '
+                    f'{{ nodes {{ committedDate }} }} }} }} }}'
+                )
+            query = FILES_QUERY_HEAD + "\n".join(parts) + FILES_QUERY_TAIL
+
+            data = self.graphql(query, {"owner": owner, "name": name})
+            repo = (data or {}).get("repository") or {}
+            limit = (data or {}).get("rateLimit") or {}
+            self.remaining = limit.get("remaining", self.remaining)
+
+            for i, path in enumerate(chunk):
+                blob = repo.get(f"f{i}")
+                if not blob or blob.get("text") is None:
+                    continue
+                history = ((repo.get(f"h{i}") or {}).get("target") or {}).get("history") or {}
+                nodes = history.get("nodes") or []
+                result[path] = {
+                    "text": blob["text"],
+                    "bytes": blob.get("byteSize", 0),
+                    "sha": blob.get("oid"),
+                    "modified_at": nodes[0]["committedDate"] if nodes else None,
+                }
+        return result
 
     # -------------------------------------------------------------------- rest
 

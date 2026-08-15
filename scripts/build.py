@@ -185,6 +185,101 @@ def build_plugin(node, curation):
     return entry, detail, extract.condense_readme(readme)
 
 
+# ---------------------------------------------------------------------- patches
+
+# Mirrors the AppStore page's QUERIES.patches, with the same two-pass fork
+# handling as plugins.
+PATCH_QUERIES = [
+    "topic:koreader-user-patch",
+    "topic:koreader-user-patch fork:only stars:>=1",
+    'in:name "KOReader.patches"',
+    'in:name "KOReader.patches" fork:only stars:>=1',
+]
+
+
+def patch_paths(node):
+    """Root-level `N-name.lua` files.
+
+    Root only, which is where the convention puts them and what the AppStore
+    itself enumerates -- confirmed against the three largest patch repos.
+    """
+    root = node.get("root") or {}
+    names = []
+    for item in root.get("entries") or []:
+        if item.get("type") != "blob":
+            continue
+        order, _ = extract.parse_patch_name(item.get("name", ""))
+        if order is not None:
+            names.append(item["name"])
+    return sorted(names)
+
+
+def build_patch(node, path, blob, curation):
+    owner = node["owner"]["login"]
+    repo = node["name"]
+    branch = (node.get("defaultBranchRef") or {}).get("name") or "main"
+    order, label = extract.parse_patch_name(path)
+
+    purpose = extract.extract_patch_purpose(blob.get("text", ""))
+    # The repository description is a weak fallback and deliberately not used
+    # as a per-patch purpose: one README describes fourteen patches at once and
+    # names none of them.
+    text_pool = " ".join([label or "", purpose])
+
+    entry = {
+        "id": f"{owner}/{repo}:{path}",
+        "owner": owner,
+        "repo": repo,
+        "path": path,
+        "order": order,
+        "url": f"https://github.com/{owner}/{repo}/blob/{branch}/{path}",
+        "raw_url": f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}",
+        "purpose": purpose,
+        "categories": extract.categorise(text_pool, node_topics(node), label or path),
+        "keywords": extract.keywords(label or "", node_topics(node), [purpose]),
+        "file_sha": blob.get("sha"),
+        "file_modified_at": blob.get("modified_at"),
+        "file_bytes": blob.get("bytes", 0),
+        "repo_stars": node["stargazerCount"],
+        "repo_pushed_at": node["pushedAt"],
+        "archived": node["isArchived"],
+    }
+    # Freshness is the file's, not the repository's.
+    entry["activity"] = extract.activity_of(
+        entry["file_modified_at"] or entry["repo_pushed_at"], entry["archived"]
+    )
+
+    curated = curation["patches"].get(entry["id"], {})
+    entry = apply_curation(entry, curated)
+    entry["tier"], entry["tier_reasons"] = extract.tier_of_patch(entry, curated.get("tier"))
+    return entry
+
+
+def node_topics(node):
+    return [t["topic"]["name"] for t in node["repositoryTopics"]["nodes"]]
+
+
+def collect_patches(client, curation, since=None):
+    repos = {}
+    for base in PATCH_QUERIES:
+        query = base + (f" pushed:>{since}" if since else "")
+        for node in client.search(query):
+            repos[node["nameWithOwner"]] = node
+
+    entries, touched_repos = [], 0
+    for node in repos.values():
+        paths = patch_paths(node)
+        if not paths:
+            continue
+        touched_repos += 1
+        blobs = client.fetch_files(node["owner"]["login"], node["name"], paths)
+        for path in paths:
+            blob = blobs.get(path)
+            if blob:
+                entries.append(build_patch(node, path, blob, curation))
+    return entries, touched_repos, len(repos)
+
+
 def collect_plugins(client, since=None):
     """Run every discovery query, de-duplicating by repository id."""
     found = {}
@@ -298,6 +393,20 @@ def main():
 
     plugins = sorted(entries.values(), key=lambda e: (-e["stars"], e["id"].lower()))
 
+    print("collecting patches…")
+    patch_entries, patch_repos, patch_repos_seen = collect_patches(client, curation, since)
+    # A diff run only sees repositories pushed recently, so patches from
+    # untouched repos are carried over the same way plugins are.
+    if args.mode == "diff" and previous:
+        have = {p["id"] for p in patch_entries}
+        for old in previous.get("patches", []):
+            if old["id"] not in have:
+                patch_entries.append(old)
+        patch_repos = max(patch_repos, previous.get("counts", {}).get("patch_repos", 0))
+    patches = sorted(patch_entries, key=lambda e: (-e["repo_stars"], e["id"].lower()))
+    print(f"  {len(patches)} patch files across {patch_repos} repos "
+          f"({patch_repos_seen} matched the search)")
+
     ok, why = sanity_check(plugins, previous)
     if not ok:
         print(f"ABORT: {why}", file=sys.stderr)
@@ -310,15 +419,16 @@ def main():
         "build_mode": args.mode,
         "counts": {
             "plugins": len(plugins),
-            "patches": 0,
-            "patch_repos": 0,
+            "patches": len(patches),
+            "patch_repos": patch_repos,
         },
-        "categories": category_summary(plugins),
+        "categories": category_summary(plugins + patches),
         "distinctions": curation["distinctions"],
         "plugins": plugins,
-        # Patches are the second pass: the unit there is a file, not a
-        # repository, and 122 repositories hold roughly 600 of them.
-        "patches": [],
+        # Separate array on purpose. A patch monkey-patches KOReader core and a
+        # plugin does not, so the two carry different risk and are never merged
+        # into one result list.
+        "patches": patches,
     }
 
     size = write_json(out_dir / "index.json", index)
@@ -347,6 +457,13 @@ def main():
     print(f"  tiers     " + "  ".join(f"{k}:{v}" for k, v in sorted(tiers.items())))
     print(f"  misc-only {misc} ({misc*100//max(len(plugins),1)}%)")
     print(f"  details   {len(details)}")
+    ptiers = {}
+    for entry in patches:
+        ptiers[entry["tier"]] = ptiers.get(entry["tier"], 0) + 1
+    no_header = sum(1 for e in patches if not e["purpose"])
+    print(f"  patches   {len(patches)} in {patch_repos} repos")
+    print(f"    tiers   " + "  ".join(f"{k}:{v}" for k, v in sorted(ptiers.items())))
+    print(f"    no doc  {no_header}")
     print(f"  requests  {client.requests}  (rate limit left: {client.remaining})")
     return 0
 

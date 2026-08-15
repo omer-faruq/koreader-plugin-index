@@ -74,7 +74,16 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
 }
 .freshness b { color: var(--text); font-weight: 600; }
 
-.searchbar { position: relative; margin: 20px 0 14px; }
+.tabs { display: flex; gap: 4px; margin: 20px 0 0; border-bottom: 1px solid var(--border); }
+.tab {
+  border: 0; background: transparent; color: var(--muted); cursor: pointer;
+  font-size: .95rem; padding: 9px 16px; border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.tab:hover { color: var(--text); }
+.tab[aria-pressed="true"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+.searchbar { position: relative; margin: 16px 0 14px; }
 #q {
   width: 100%; padding: 15px 44px 15px 16px; font-size: 1.05rem;
   color: var(--text); background: var(--surface);
@@ -162,6 +171,11 @@ footer a { color: var(--accent); }
   <p class="tagline">Describe what you want to do. Not what the plugin is called.</p>
   <div class="freshness" id="freshness">Loading index…</div>
 </header>
+
+<div class="tabs" id="tabs">
+  <button class="tab" data-tab="plugins" aria-pressed="true">Plugins</button>
+  <button class="tab" data-tab="patches" aria-pressed="false">Patches</button>
+</div>
 
 <div class="searchbar">
   <input id="q" type="search" autocomplete="off" autofocus
@@ -317,7 +331,9 @@ function explain(entry, tokens) {
 
 // `readmes` stays null until the deep-search box is ticked. It is roughly a
 // megabyte, and most searches are answered without it.
-const state = { index: null, query: "", category: null, showC: false, readmes: null };
+const state = { index: null, tab: "plugins", query: "", category: null, showC: false, readmes: null };
+
+const isPatch = entry => Boolean(entry.path);
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
@@ -341,12 +357,16 @@ function tierLabel(entry) {
 
 function card(entry, tokens) {
   const why = explain(entry, tokens);
-  const handoff = `${APPSTORE}?tab=plugins&owner=${encodeURIComponent(entry.owner)}&q=${encodeURIComponent(entry.repo)}`;
+  const patch = isPatch(entry);
+  const tab = patch ? "patches" : "plugins";
+  const handoff = `${APPSTORE}?tab=${tab}&owner=${encodeURIComponent(entry.owner)}&q=${encodeURIComponent(entry.repo)}`;
+  const stars = patch ? entry.repo_stars : entry.stars;
+  const title = patch ? entry.path : entry.repo;
   return `
   <article class="card">
     <div class="card-head">
-      <h3><a href="${esc(entry.url)}" target="_blank" rel="noopener">${esc(entry.repo)}</a></h3>
-      <span class="owner">${esc(entry.owner)}</span>
+      <h3><a href="${esc(entry.url)}" target="_blank" rel="noopener">${esc(title)}</a></h3>
+      <span class="owner">${esc(entry.owner)}/${esc(entry.repo)}</span>
     </div>
     <p class="purpose${entry.purpose ? "" : " empty"}">${
       entry.purpose ? esc(entry.purpose)
@@ -354,13 +374,15 @@ function card(entry, tokens) {
     }</p>
     <div class="badges">
       <span class="badge tier-${esc(entry.tier)}">${esc(tierLabel(entry))}</span>
-      <span class="badge">★ ${entry.stars ?? 0}</span>
+      <span class="badge">★ ${stars ?? 0}</span>
+      ${patch && entry.order != null ? `<span class="badge">load order ${entry.order}</span>` : ""}
       ${(entry.categories || []).map(c => `<span class="badge">${esc(c)}</span>`).join("")}
       ${why.length ? `<span class="why">matched <span>${why.map(esc).join(", ")}</span></span>` : ""}
     </div>
     <div class="actions">
       <a href="${esc(handoff)}" target="_blank" rel="noopener">Open in AppStore →</a>
       <a href="${esc(entry.url)}" target="_blank" rel="noopener">GitHub</a>
+      ${patch ? `<a href="${esc(entry.raw_url)}" target="_blank" rel="noopener">Raw .lua</a>` : ""}
     </div>
   </article>`;
 }
@@ -378,7 +400,9 @@ function noteFor(shown) {
 function render() {
   const idx = state.index;
   const tokens = tokenise(state.query);
-  let list = idx.plugins.slice();
+  // Never merged. A patch monkey-patches KOReader core and a plugin does not,
+  // so the two are recommended under different rules and shown apart.
+  let list = (state.tab === "patches" ? idx.patches : idx.plugins).slice();
 
   if (state.category) list = list.filter(e => (e.categories || []).includes(state.category));
   if (!state.showC) list = list.filter(e => e.tier !== "C");
@@ -392,13 +416,22 @@ function render() {
   } else {
     // No query: lead with the curated set rather than the most-starred, which
     // is what someone browsing without a goal actually wants to see.
-    list.sort((a, b) => (TIER_BONUS[b.tier] - TIER_BONUS[a.tier]) || (b.stars - a.stars));
+    const pop = e => (isPatch(e) ? e.repo_stars : e.stars) || 0;
+    list.sort((a, b) => (TIER_BONUS[b.tier] - TIER_BONUS[a.tier]) || (pop(b) - pop(a)));
     list = list.slice(0, 30);
     heading = state.category ? "In this category" : "Worth starting with";
   }
 
   $("count").textContent = tokens.length ? heading : "";
-  $("notes").innerHTML = list.length ? noteFor(list) : "";
+
+  // Stated once, at the top of the tab, rather than repeated on every card:
+  // for a plugin, going stale costs a feature; for a patch it can cost a boot.
+  const warning = state.tab === "patches"
+    ? `<div class="note"><b>Patches change KOReader itself</b>They edit core behaviour
+       rather than adding a plugin, so one written for an older KOReader can break
+       after an update. Prefer a plugin when one does the same job.</div>`
+    : "";
+  $("notes").innerHTML = warning + (list.length ? noteFor(list) : "");
 
   if (!list.length) {
     $("results").innerHTML = `<div class="state">
@@ -461,8 +494,20 @@ async function boot() {
     return;
   }
 
+  state.index.patches = state.index.patches || [];
   renderFreshness();
   renderChips();
+
+  $("tabs").querySelectorAll(".tab").forEach(button => {
+    button.addEventListener("click", () => {
+      state.tab = button.dataset.tab;
+      state.category = null;
+      $("tabs").querySelectorAll(".tab").forEach(b =>
+        b.setAttribute("aria-pressed", String(b.dataset.tab === state.tab)));
+      $("chips").querySelectorAll(".chip").forEach(c => c.setAttribute("aria-pressed", "false"));
+      render();
+    });
+  });
 
   const params = new URLSearchParams(location.search);
   if (params.has("q")) { state.query = params.get("q"); $("q").value = state.query; }

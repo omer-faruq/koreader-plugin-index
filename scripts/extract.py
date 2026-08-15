@@ -320,6 +320,52 @@ def activity_of(iso_timestamp, archived=False, now=None):
     return "active" if age <= DORMANT_DAYS else "dormant"
 
 
+PATCH_FILE_RE = re.compile(r"^(\d+)-(.+)\.lua$", re.IGNORECASE)
+
+
+def parse_patch_name(filename):
+    """Split KOReader's `N-name.lua` convention.
+
+    The numeric prefix is the load order, not decoration, so it is returned
+    rather than stripped and forgotten.
+    """
+    match = PATCH_FILE_RE.match(filename)
+    if not match:
+        return None, None
+    order = int(match.group(1))
+    label = match.group(2).replace("-", " ").replace("_", " ").strip()
+    return order, label
+
+
+def tier_of_patch(entry, curated_tier=None):
+    """Patch tiers weigh different things than plugin tiers.
+
+    A patch monkey-patches KOReader core. When a plugin goes stale a feature
+    stops working; when a patch goes stale against a newer KOReader it can stop
+    the device booting. So freshness here is measured on the file itself, and
+    an undocumented patch -- no comment saying what it does -- is treated as
+    unsafe to recommend rather than merely thin.
+    """
+    reasons = []
+    if entry.get("purpose"):
+        reasons.append("has_header")
+    else:
+        reasons.append("no_header")
+    if entry.get("archived"):
+        reasons.append("archived")
+    reasons.append(entry.get("activity", "dormant"))
+
+    if curated_tier:
+        return curated_tier, ["curated"] + reasons
+
+    demoted = (
+        not entry.get("purpose")
+        or entry.get("archived")
+        or entry.get("activity") != "active"
+    )
+    return ("C" if demoted else "B"), reasons
+
+
 def tier_of(entry, curated_tier=None):
     """A curated, B automatically clean, C shown only on request.
 
