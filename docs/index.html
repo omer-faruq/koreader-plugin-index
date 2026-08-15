@@ -168,6 +168,25 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
   box-shadow: var(--shadow);
 }
 .panel-lead { margin: 0 0 12px; font-size: .85rem; color: var(--muted); }
+
+/* Two statements, two meanings, so two colours. Where the key goes is
+   reassurance and takes the accent; where it stays is a real caution and takes
+   the amber already used for the patch warning. Painting the reassurance red
+   would read as an error and say the opposite of what it means. */
+.keysafe { margin: 0 0 14px; font-size: .84rem; line-height: 1.5; }
+.keysafe p { margin: 0; padding: 9px 12px; border-left: 3px solid; }
+.keysafe b { display: block; }
+.keysafe-good {
+  color: var(--text); background: var(--accent-soft);
+  border-color: var(--accent); border-radius: 8px 8px 0 0;
+}
+.keysafe-good b { color: var(--accent); }
+.keysafe-warn {
+  color: var(--text); background: var(--warn-bg);
+  border-color: var(--warn-border); border-radius: 0 0 8px 8px;
+}
+.keysafe-warn b { color: var(--tier-c); }
+.keysafe em { font-style: normal; font-weight: 600; }
 .panel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
 .panel-grid label { display: flex; flex-direction: column; gap: 4px; font-size: .8rem; color: var(--muted); }
 .panel-grid label.wide { grid-column: 1 / -1; }
@@ -306,11 +325,15 @@ footer a { color: var(--accent); }
     </div>
 
     <div class="panel" id="aiPanel" hidden>
-      <p class="panel-lead">
-        Your key is stored in this browser only and requests go straight from here
-        to the provider — there is no server in between. Use a key with a spend
-        limit, and not on a shared computer.
-      </p>
+      <div class="keysafe">
+        <p class="keysafe-good"><b>Your key never reaches us.</b>
+          It is saved in this browser and sent straight to the provider you choose.
+          This site is a static page with no server behind it, so there is nothing
+          here that could receive it.</p>
+        <p class="keysafe-warn"><b>It does stay in this browser.</b>
+          Anyone using this computer could recover it. Use a key with a spend limit,
+          and press <em>Forget key</em> when you are done on a shared machine.</p>
+      </div>
       <div class="panel-grid">
         <label>Provider
           <select id="aiProvider">
