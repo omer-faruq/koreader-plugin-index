@@ -134,6 +134,35 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
 .modal-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; font-size: .82rem; color: var(--muted); }
 #aiOut:not(:empty) { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 14px; }
 
+.overlay {
+  position: fixed; inset: 0; z-index: 60; display: flex;
+  align-items: center; justify-content: center;
+  padding: 5vh 16px; background: rgba(0,0,0,.45); overflow-y: auto;
+}
+.sheet {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; box-shadow: 0 12px 40px rgba(0,0,0,.25);
+  width: 100%; max-width: 460px; padding: 20px;
+}
+.sheet .modal-head { margin-top: 0; }
+.steps { margin: 0 0 14px; padding-left: 20px; font-size: .88rem; line-height: 1.6; }
+.steps b { color: var(--text); }
+.pair { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.pair-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; }
+.pair-row + .pair-row { border-top: 1px solid var(--border); }
+.pair-label { font-size: .74rem; color: var(--muted); width: 108px; flex: none; }
+.pair code {
+  flex: 1; font-size: .95rem; color: var(--text); word-break: break-all;
+  background: var(--surface-2); padding: 5px 9px; border-radius: 6px;
+}
+.icon-btn {
+  border: 1px solid var(--border); background: transparent; color: var(--accent);
+  border-radius: 6px; cursor: pointer; font-size: .95rem; padding: 4px 9px; flex: none;
+}
+.icon-btn:hover { border-color: var(--accent); background: var(--accent-soft); }
+.sheet-foot { margin: 12px 0 0; font-size: .76rem; color: var(--muted); }
+.actions .act svg { width: 15px; height: 15px; vertical-align: -2px; margin-right: 4px; }
+
 .chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; }
 .chip {
   border: 1px solid var(--border); background: var(--surface);
@@ -301,6 +330,36 @@ footer a { color: var(--accent); }
      -- typing a sentence into a live keyword filter degrades the filter while
      you write -- and the answer is a ranked list with reasons and expandable
      READMEs, which wants the width of the page rather than a box on top of it. -->
+<!-- Field names below are the ones the AppStore's own prompt uses, so there is
+     nothing to translate between this screen and the device's. -->
+<div class="overlay" id="installModal" hidden>
+  <div class="sheet">
+    <div class="modal-head">
+      <h2 id="installTitle">Install on your device</h2>
+      <button class="btn-x" id="installClose" aria-label="Close">×</button>
+    </div>
+    <ol class="steps">
+      <li>In KOReader, open <b>Tools → App Store</b> and tap the gear icon.</li>
+      <li>Choose <b id="installAction">Install plugin from URL</b>.</li>
+      <li>Type these two values:</li>
+    </ol>
+    <div class="pair">
+      <div class="pair-row">
+        <span class="pair-label">Repository owner</span>
+        <code id="installOwner"></code>
+        <button class="icon-btn" data-copyfield="installOwner" title="Copy">⧉</button>
+      </div>
+      <div class="pair-row">
+        <span class="pair-label">Repository name</span>
+        <code id="installRepo"></code>
+        <button class="icon-btn" data-copyfield="installRepo" title="Copy">⧉</button>
+      </div>
+    </div>
+    <p class="sheet-foot">The copy buttons help if you are reading this on the
+      device itself; otherwise just type them in.</p>
+  </div>
+</div>
+
 <div id="aiView" hidden>
   <div class="modal-card">
     <div class="modal-head">
@@ -816,8 +875,10 @@ function card(entry, tokens) {
       ${why.length ? `<span class="why">matched <span>${why.map(esc).join(", ")}</span></span>` : ""}
     </div>
     <div class="actions">
-      <button class="act" data-copy="${esc(entry.owner)}/${esc(entry.repo)}"
-        title="Paste this into Install from URL in the AppStore plugin on your device">Copy ${esc(entry.owner)}/${esc(entry.repo)}</button>
+      <button class="act" data-install="${esc(entry.id)}" title="How to install this on your device">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+        Install</button>
       <a href="${esc(entry.url)}" target="_blank" rel="noopener">GitHub</a>
       ${patch ? `<a href="${esc(entry.raw_url)}" target="_blank" rel="noopener">Raw .lua</a>` : ""}
       ${entry.detail ? `<a href="#" data-readme="${esc(entry.id)}">README</a>` : ""}
@@ -908,26 +969,49 @@ function render() {
   bindReadme($("results"), list);
 }
 
-function bindReadme(root, entries) {
-  // What closes the loop is pasting owner/repo into Install from URL on the
-  // device. Linking to the AppStore's web page did not: it shows the same
-  // GitHub data this card already shows, and installs nothing.
-  root.querySelectorAll("[data-copy]").forEach(button => {
+function showInstall(entry) {
+  const patch = isPatch(entry);
+  $("installTitle").textContent = patch ? "Install this patch" : "Install this plugin";
+  $("installAction").textContent = patch ? "Install patch from URL" : "Install plugin from URL";
+  $("installOwner").textContent = entry.owner;
+  $("installRepo").textContent = entry.repo;
+  $("installModal").hidden = false;
+}
+
+function setupInstallModal() {
+  const close = () => { $("installModal").hidden = true; };
+  $("installClose").addEventListener("click", close);
+  $("installModal").addEventListener("click", e => { if (e.target === $("installModal")) close(); });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && !$("installModal").hidden) close();
+  });
+  $("installModal").querySelectorAll("[data-copyfield]").forEach(button => {
     button.addEventListener("click", async () => {
-      const value = button.dataset.copy;
-      try { await navigator.clipboard.writeText(value); }
+      const text = $(button.dataset.copyfield).textContent;
+      try { await navigator.clipboard.writeText(text); }
       catch {
         const scratch = document.createElement("textarea");
-        scratch.value = value;
+        scratch.value = text;
         document.body.appendChild(scratch);
         scratch.select();
         document.execCommand("copy");
         scratch.remove();
       }
       const was = button.textContent;
-      button.textContent = "Copied — paste into Install from URL";
-      setTimeout(() => { button.textContent = was; }, 2200);
+      button.textContent = "✓";
+      setTimeout(() => { button.textContent = was; }, 1400);
     });
+  });
+}
+
+function bindReadme(root, entries) {
+  // Copying was the wrong instrument: the search happens on a computer and the
+  // installation on an e-reader, and a clipboard does not cross that gap. What
+  // helps is being told where to go and exactly what to type, in the words the
+  // device itself uses.
+  root.querySelectorAll("[data-install]").forEach(button => {
+    const entry = entries.find(e => e.id === button.dataset.install);
+    if (entry) button.addEventListener("click", () => showInstall(entry));
   });
 
   const byId = new Map(entries.map(e => [e.id, e]));
@@ -1098,6 +1182,7 @@ async function boot() {
   });
 
   setupAI();
+  setupInstallModal();
   $("clear").hidden = !state.query;
   render();
 }
