@@ -90,8 +90,22 @@ def stem(word):
 
 
 def tokenise(text):
-    return [t for t in TOKEN_RE.findall((text or "").lower())
-            if t not in QUERY_STOPWORDS and len(t) > 1]
+    """Distinct tokens, in order of first appearance.
+
+    Scoring adds one contribution per token, so a repeated word multiplied its
+    own weight. That was harmless while a query was something a person typed,
+    and became a real distortion once stage one started expanding questions:
+    "web search, internet search, search web, online search" is one idea and
+    five copies of the word `search`, and whatever the model happened to repeat
+    would pull the ranking after it.
+    """
+    seen, out = set(), []
+    for token in TOKEN_RE.findall((text or "").lower()):
+        if token in QUERY_STOPWORDS or len(token) <= 1 or token in seen:
+            continue
+        seen.add(token)
+        out.append(token)
+    return out
 
 
 def _wordset(text):

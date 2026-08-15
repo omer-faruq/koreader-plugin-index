@@ -552,8 +552,18 @@ function stem(word) {
 
 const words = s => (s || "").toLowerCase().match(/[a-z0-9]+/g) || [];
 
+// Distinct tokens, in order of first appearance. Scoring adds one contribution
+// per token, so a repeated word multiplied its own weight -- harmless for a
+// typed query, a real distortion once stage one expands "web search, internet
+// search, search web" into five copies of the word `search`.
 function tokenise(text) {
-  return words(text).filter(t => t.length > 1 && !STOPWORDS.has(t));
+  const seen = new Set(), out = [];
+  for (const t of words(text)) {
+    if (t.length <= 1 || STOPWORDS.has(t) || seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+  }
+  return out;
 }
 
 function wordset(text) {
@@ -698,9 +708,12 @@ function tuning() {
 // the shortlist good enough that stage two has something worth ranking.
 const EXPAND_PROMPT = [
   "Read a question about KOReader plugins, in any language.",
-  "Reply with the English search terms someone would use to find what they need,",
+  "Reply with the distinctive English words someone would use to find what they need,",
   "including obvious synonyms: 'annotations' alongside 'highlights', 'opds' alongside 'catalog'.",
-  "Six to twelve terms, single words or short phrases, no explanation.",
+  "Single words wherever possible. Never repeat an idea in another phrasing:",
+  "'web search', 'search web' and 'online search' are one word, `search`, three times over.",
+  "Never include 'koreader', 'plugin' or 'ereader' — every entry has them and they",
+  "distinguish nothing. Six to twelve terms, no explanation.",
   // No category is asked for. Category names are already among the fields the
   // local scorer matches, so a term like "sync" reaches the category anyway,
   // and a hard category choice here would risk excluding the right answer the
