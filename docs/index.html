@@ -115,6 +115,32 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
 }
 .toolbar label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 
+.linkish {
+  border: 0; background: transparent; color: var(--accent); cursor: pointer;
+  font-size: .85rem; padding: 0; text-decoration: underline;
+}
+.panel {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 16px; margin-bottom: 16px;
+  box-shadow: var(--shadow);
+}
+.panel-lead { margin: 0 0 12px; font-size: .85rem; color: var(--muted); }
+.panel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+.panel-grid label { display: flex; flex-direction: column; gap: 4px; font-size: .8rem; color: var(--muted); }
+.panel-grid label.wide { grid-column: 1 / -1; }
+.panel-grid input, .panel-grid select {
+  padding: 8px 10px; font-size: .9rem; color: var(--text);
+  background: var(--bg); border: 1px solid var(--border); border-radius: 7px;
+}
+.panel-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; font-size: .82rem; color: var(--muted); }
+.btn {
+  border: 1px solid var(--accent); background: var(--accent-soft); color: var(--accent);
+  border-radius: 7px; padding: 6px 14px; font-size: .85rem; cursor: pointer; font-weight: 600;
+}
+.btn.ghost { border-color: var(--border); background: transparent; color: var(--muted); font-weight: 400; }
+.ai-result { border-left: 3px solid var(--accent); padding-left: 12px; margin-bottom: 16px; }
+.ai-why { font-size: .85rem; color: var(--muted); margin: 4px 0 0; }
+
 .note {
   background: var(--warn-bg); border: 1px solid var(--warn-border);
   border-radius: var(--radius); padding: 11px 14px; margin-bottom: 14px;
@@ -202,10 +228,41 @@ footer a { color: var(--accent); }
 <div class="toolbar">
   <label><input type="checkbox" id="showC"> Include dormant, forks and stubs</label>
   <label id="deepWrap"><input type="checkbox" id="deepSearch"> Search inside READMEs <span id="deepState"></span></label>
+  <button class="linkish" id="aiToggle">AI ranking…</button>
   <span id="count"></span>
 </div>
 
+<div class="panel" id="aiPanel" hidden>
+  <p class="panel-lead">
+    Keyword search finds candidates; a model decides which of them actually answer
+    the question. Your key is stored in this browser only and requests go straight
+    from here to the provider — there is no server in between. Use a key with a
+    spend limit, and not on a shared computer.
+  </p>
+  <div class="panel-grid">
+    <label>Provider
+      <select id="aiProvider">
+        <option value="deepseek">DeepSeek</option>
+        <option value="openai">OpenAI</option>
+        <option value="openrouter">OpenRouter</option>
+        <option value="anthropic">Anthropic</option>
+        <option value="gemini">Google Gemini</option>
+        <option value="custom">Other (OpenAI-compatible)</option>
+      </select>
+    </label>
+    <label>Model <input id="aiModel" type="text" autocomplete="off"></label>
+    <label class="wide" id="aiUrlWrap" hidden>API URL <input id="aiUrl" type="text" autocomplete="off"></label>
+    <label class="wide">API key <input id="aiKey" type="password" autocomplete="off" placeholder="stored in this browser"></label>
+  </div>
+  <div class="panel-actions">
+    <button class="btn" id="aiSave">Save</button>
+    <button class="btn ghost" id="aiClear">Forget key</button>
+    <span id="aiStatusText"></span>
+  </div>
+</div>
+
 <div id="notes"></div>
+<div id="aiOut" hidden></div>
 <div id="results"><div class="state">Loading…</div></div>
 
 <footer>
@@ -354,6 +411,164 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+/* ---------------------------------------------------------------- AI ranking
+
+   Retrieve, then rank. The local scorer narrows 740 entries to a shortlist and
+   the model decides which of those actually answer the question -- so a request
+   costs a few thousand tokens instead of the whole catalogue, and the model can
+   only name things that exist.
+
+   The shortlist deliberately omits `keywords`. Keyword breadth is what gets the
+   right entry into the shortlist, and it is also what produces the confusions
+   worth removing: assistant.koplugin surfaces for "sync highlights" because its
+   purpose mentions highlighted text. Give the model the purpose and it sees the
+   difference; give it the keywords too and it inherits the same false signal. */
+
+const PROVIDERS = {
+  deepseek:   { url: "https://api.deepseek.com/chat/completions",       model: "deepseek-chat",     shape: "openai" },
+  openai:     { url: "https://api.openai.com/v1/chat/completions",      model: "gpt-4o-mini",       shape: "openai" },
+  openrouter: { url: "https://openrouter.ai/api/v1/chat/completions",   model: "openai/gpt-4o-mini", shape: "openai" },
+  anthropic:  { url: "https://api.anthropic.com/v1/messages",           model: "claude-sonnet-4-5", shape: "anthropic" },
+  gemini:     { url: "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                model: "gemini-2.0-flash", shape: "gemini" },
+  custom:     { url: "", model: "", shape: "openai" }
+};
+
+const SHORTLIST = 25;
+
+const SYSTEM_PROMPT = [
+  "You help people find KOReader plugins.",
+  "You are given a question and a shortlist of candidates, each with its stated purpose.",
+  "Choose only the ones that genuinely solve the stated problem, at most four, best first.",
+  "A candidate matching on a word is not the same as it doing the job: a plugin that",
+  "answers questions about highlighted text does not synchronise highlights between devices.",
+  "Never name anything outside the shortlist. Never claim a capability the purpose does not state.",
+  "If nothing fits, return an empty list.",
+  'Reply with JSON only: {"picks":[{"id":"owner/repo","why":"one short sentence"}],"note":"optional one sentence"}'
+].join(" ");
+
+function shortlistFor(query) {
+  const tokens = tokenise(query);
+  const pool = state.index.plugins.filter(e => e.tier !== "C");
+  return pool.map(e => [score(e, tokens), e])
+    .filter(p => p[0] > 0)
+    .sort((a, b) => b[0] - a[0])
+    .slice(0, SHORTLIST)
+    .map(p => p[1]);
+}
+
+function compact(entry) {
+  return {
+    id: entry.id,
+    purpose: (entry.purpose || entry.description || "").slice(0, 260),
+    categories: entry.categories,
+    stars: entry.stars,
+    status: entry.activity,
+    reviewed: entry.tier === "A"
+  };
+}
+
+function aiConfig() {
+  try { return JSON.parse(localStorage.getItem("kpi.ai") || "null"); } catch { return null; }
+}
+
+async function callModel(cfg, query, candidates) {
+  const preset = PROVIDERS[cfg.provider] || PROVIDERS.custom;
+  const model = cfg.model || preset.model;
+  const relevant = (state.index.distinctions || []).filter(d =>
+    (d.between || []).filter(x => candidates.some(c => c.id === x)).length >= 2);
+
+  const user = JSON.stringify({
+    question: query,
+    candidates: candidates.map(compact),
+    known_confusions: relevant.map(d => ({ between: d.between, note: d.say }))
+  });
+
+  let url = cfg.url || preset.url;
+  let headers = { "Content-Type": "application/json" };
+  let body;
+
+  if (preset.shape === "anthropic") {
+    headers["x-api-key"] = cfg.key;
+    headers["anthropic-version"] = "2023-06-01";
+    // Anthropic blocks browser origins unless a request opts in explicitly.
+    headers["anthropic-dangerous-direct-browser-access"] = "true";
+    body = { model, max_tokens: 700, system: SYSTEM_PROMPT, messages: [{ role: "user", content: user }] };
+  } else if (preset.shape === "gemini") {
+    url = url.replace("{model}", model) + `?key=${encodeURIComponent(cfg.key)}`;
+    body = {
+      systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+      contents: [{ role: "user", parts: [{ text: user }] }],
+      generationConfig: { responseMimeType: "application/json" }
+    };
+  } else {
+    headers["Authorization"] = `Bearer ${cfg.key}`;
+    body = {
+      model, temperature: 0,
+      messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: user }]
+    };
+  }
+
+  const resp = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
+  if (!resp.ok) throw new Error(`${resp.status} ${(await resp.text()).slice(0, 200)}`);
+  const data = await resp.json();
+
+  const text = preset.shape === "anthropic" ? (data.content || []).map(p => p.text).join("")
+    : preset.shape === "gemini" ? ((data.candidates || [])[0]?.content?.parts || []).map(p => p.text).join("")
+    : (data.choices || [])[0]?.message?.content || "";
+
+  // Models wrap JSON in code fences often enough to be worth handling rather
+  // than failing the whole request over.
+  const cleaned = text.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
+  try { return JSON.parse(cleaned); }
+  catch { throw new Error("the model did not return usable JSON"); }
+}
+
+async function runAI() {
+  const cfg = aiConfig();
+  if (!cfg || !cfg.key) { $("aiPanel").hidden = false; return; }
+  if (!state.query.trim()) return;
+
+  const candidates = shortlistFor(state.query);
+  if (!candidates.length) return;
+
+  $("aiOut").hidden = false;
+  $("aiOut").innerHTML = `<div class="state">Asking the model about ${candidates.length} candidates…</div>`;
+
+  let result;
+  try {
+    result = await callModel(cfg, state.query, candidates);
+  } catch (err) {
+    // A browser-origin block is by far the likeliest failure and says nothing
+    // useful on its own, so name it rather than showing a bare "Failed to fetch".
+    const blocked = /failed to fetch|networkerror|load failed/i.test(err.message);
+    $("aiOut").innerHTML = `<div class="note"><b>The request did not go through</b>${
+      blocked
+        ? "The provider appears to refuse requests made straight from a browser. That is a provider-side policy, not a key problem — try another provider, or use the knowledge base with your own assistant."
+        : esc(err.message)
+    }</div>`;
+    return;
+  }
+
+  const byId = new Map(candidates.map(e => [e.id, e]));
+  const picks = (result.picks || []).filter(p => byId.has(p.id));
+  if (!picks.length) {
+    $("aiOut").innerHTML = `<div class="note info"><b>Nothing in the shortlist fits</b>${
+      esc(result.note || "The model found no candidate that actually does this. The keyword results are below.")}</div>`;
+    return;
+  }
+
+  $("aiOut").innerHTML =
+    `<div class="section-title">Model's picks</div>` +
+    (result.note ? `<div class="note info"><b>Note</b>${esc(result.note)}</div>` : "") +
+    picks.map(p => {
+      const entry = byId.get(p.id);
+      return `<div class="ai-result">${card(entry, tokenise(state.query))
+        .replace("</article>", `<p class="ai-why">${esc(p.why || "")}</p></article>`)}</div>`;
+    }).join("");
+  bindReadme($("aiOut"), picks.map(p => byId.get(p.id)));
+}
+
 /* ------------------------------------------------------------------ render */
 
 function tierLabel(entry) {
@@ -452,7 +667,24 @@ function render() {
        rather than adding a plugin, so one written for an older KOReader can break
        after an update. Prefer a plugin when one does the same job.</div>`
     : "";
-  $("notes").innerHTML = warning + (list.length ? noteFor(list, tokens) : "");
+  // Offered where it helps, not on arrival. Someone typing a sentence rather
+  // than a plugin name is describing a problem, and that is exactly the case
+  // keyword matching handles worst -- "sync highlights" pulls in a plugin that
+  // merely mentions highlighted text. A dialog on page load would be dismissed
+  // before it meant anything.
+  const looksLikeQuestion = tokens.length >= 3 && state.tab === "plugins";
+  const hint = (looksLikeQuestion && !aiConfig() && list.length > 3)
+    ? `<div class="note info"><b>That reads like a question</b>
+       Keyword search matched ${list.length} entries and cannot tell which of them
+       actually do this. A model can, using your own API key —
+       <button class="linkish" id="hintOpen">set one up</button>. Everything else
+       here works without it.</div>`
+    : "";
+
+  $("notes").innerHTML = warning + hint + (list.length ? noteFor(list, tokens) : "");
+  if ($("hintOpen")) {
+    $("hintOpen").addEventListener("click", () => { $("aiPanel").hidden = false; });
+  }
 
   if (!list.length) {
     $("results").innerHTML = `<div class="state">
@@ -466,8 +698,12 @@ function render() {
     (tokens.length ? "" : `<div class="section-title">${esc(heading)}</div>`) +
     list.map(e => card(e, tokens)).join("");
 
-  const byId = new Map(list.map(e => [e.id, e]));
-  $("results").querySelectorAll("[data-readme]").forEach(link => {
+  bindReadme($("results"), list);
+}
+
+function bindReadme(root, entries) {
+  const byId = new Map(entries.map(e => [e.id, e]));
+  root.querySelectorAll("[data-readme]").forEach(link => {
     link.addEventListener("click", async event => {
       event.preventDefault();
       const entry = byId.get(link.dataset.readme);
@@ -596,6 +832,9 @@ async function boot() {
   $("q").addEventListener("input", e => {
     state.query = e.target.value;
     $("clear").hidden = !state.query;
+    // Last answer belongs to the previous question; leaving it on screen while
+    // the results underneath change is worse than showing nothing.
+    $("aiOut").hidden = true;
     clearTimeout(timer);
     timer = setTimeout(render, 120);
   });
@@ -631,8 +870,57 @@ async function boot() {
     render();
   });
 
+  setupAI();
   $("clear").hidden = !state.query;
   render();
+}
+
+function setupAI() {
+  const cfg = aiConfig() || { provider: "deepseek", model: "", url: "", key: "" };
+  const fill = () => {
+    const preset = PROVIDERS[$("aiProvider").value] || PROVIDERS.custom;
+    $("aiModel").placeholder = preset.model || "model name";
+    $("aiUrlWrap").hidden = $("aiProvider").value !== "custom";
+    if ($("aiProvider").value === "custom" && !$("aiUrl").value) {
+      $("aiUrl").placeholder = "https://your-host/v1/chat/completions";
+    }
+  };
+  $("aiProvider").value = cfg.provider || "deepseek";
+  $("aiModel").value = cfg.model || "";
+  $("aiUrl").value = cfg.url || "";
+  $("aiKey").value = cfg.key || "";
+  fill();
+
+  const say = text => { $("aiStatusText").textContent = text; };
+  if (cfg.key) say(`Ready — ${cfg.provider}`);
+
+  $("aiProvider").addEventListener("change", fill);
+  $("aiToggle").addEventListener("click", () => { $("aiPanel").hidden = !$("aiPanel").hidden; });
+  $("aiSave").addEventListener("click", () => {
+    const next = {
+      provider: $("aiProvider").value,
+      model: $("aiModel").value.trim(),
+      url: $("aiUrl").value.trim(),
+      key: $("aiKey").value.trim()
+    };
+    if (!next.key) { say("A key is needed."); return; }
+    localStorage.setItem("kpi.ai", JSON.stringify(next));
+    say(`Saved — ${next.provider}. Press Enter in the search box to rank with it.`);
+    $("aiPanel").hidden = true;
+    if (state.query.trim()) runAI();
+  });
+  $("aiClear").addEventListener("click", () => {
+    localStorage.removeItem("kpi.ai");
+    $("aiKey").value = "";
+    $("aiOut").hidden = true;
+    say("Key forgotten.");
+  });
+
+  // Enter runs the model. Typing must never trigger it -- a request per
+  // keystroke would spend the user's money on half-written questions.
+  $("q").addEventListener("keydown", event => {
+    if (event.key === "Enter") { event.preventDefault(); runAI(); }
+  });
 }
 
 boot();

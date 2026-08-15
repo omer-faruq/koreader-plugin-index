@@ -94,5 +94,5 @@ covers it.
 - [x] First live run: 740 plugins, 449 patch files
 - [x] Patches — indexed as files, in their own tab
 - [x] `knowledge-base.md` and `llms.txt` for LLM assistants
-- [ ] Optional AI search in the page, with the user's own key
+- [x] Optional AI ranking in the page, with the user's own key
 - [ ] On-device search in the AppStore plugin
