@@ -310,6 +310,29 @@ def write_json(path, payload):
     return path.stat().st_size
 
 
+# Only what a device needs to search, show a row, and install. Everything a
+# reader could tap through to on a bigger screen -- topics, licence, fork
+# counts, tier reasoning, feature lists -- stays out, because this file is
+# fetched over a patchy connection onto hardware with a slow processor.
+MIN_FIELDS = ("owner", "repo", "categories", "tier", "activity", "stars")
+
+# Keywords were more than half the file at 24 apiece. They are ordered by how
+# identifying they are -- topics first, then description words, then README
+# frequency terms -- so the tail is the noisy half and the first twelve carry
+# the search. `id` is left out entirely: it is owner .. "/" .. repo.
+MIN_KEYWORDS = 12
+
+
+def minimal_entry(entry, purpose_chars=130):
+    out = {field: entry.get(field) for field in MIN_FIELDS}
+    out["keywords"] = (entry.get("keywords") or [])[:MIN_KEYWORDS]
+    text = entry.get("purpose") or entry.get("description") or ""
+    if len(text) > purpose_chars:
+        text = text[:purpose_chars].rsplit(" ", 1)[0] + "…"
+    out["purpose"] = text
+    return out
+
+
 def category_summary(entries):
     counts = {}
     for entry in entries:
@@ -485,6 +508,17 @@ def main():
         encoding="utf-8")
     kb_size = len(kb.encode("utf-8"))
 
+    # Plugins only, and tier C left out: on e-ink the long tail is unreachable
+    # noise, and it is a third of the file.
+    device_entries = [minimal_entry(e) for e in plugins if e["tier"] != "C"]
+    min_size = write_json(out_dir / "index.min.json", {
+        "schema": SCHEMA_VERSION,
+        "generated_at": started,
+        "counts": {"plugins": len(device_entries)},
+        "categories": category_summary(plugins),
+        "plugins": device_entries,
+    })
+
     for detail in details.values():
         owner, repo = detail["id"].split("/", 1)
         write_json(out_dir / "detail" / f"{owner}__{repo}.json", detail)
@@ -507,6 +541,7 @@ def main():
     print(f"    tiers   " + "  ".join(f"{k}:{v}" for k, v in sorted(ptiers.items())))
     print(f"    no doc  {no_header}")
     print(f"  knowledge-base.md ({kb_size/1024:.0f} KB)  llms.txt")
+    print(f"  index.min.json    ({min_size/1024:.0f} KB, {len(device_entries)} entries)")
     print(f"  requests  {client.requests}  (rate limit left: {client.remaining})")
     return 0
 

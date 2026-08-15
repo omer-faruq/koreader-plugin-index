@@ -363,7 +363,7 @@ footer a { color: var(--accent); }
 <div id="aiView" hidden>
   <div class="modal-card">
     <div class="modal-head">
-      <h2>Describe what you need</h2>
+      <h2 id="aiHeading">Describe what you need</h2>
       <button class="linkish" id="aiClose">← Back to browsing</button>
     </div>
 
@@ -613,6 +613,12 @@ const EXPAND_PROMPT = [
   'JSON only: {"terms":["..."]}'
 ].join(" ");
 
+const PATCH_RULES = [
+  "These are user patches, not plugins: each edits KOReader's own behaviour and",
+  "can break when KOReader updates. Say what a patch does, and prefer the ones",
+  "still being maintained. The load order number is part of the filename."
+].join(" ");
+
 const SYSTEM_PROMPT = [
   "You help people find KOReader plugins.",
   "You are given a question and a shortlist of candidates, each with its stated purpose.",
@@ -627,7 +633,14 @@ const SYSTEM_PROMPT = [
 const SHORTLIST_FLOOR = 10;
 
 function aiPool() {
-  let pool = state.index.plugins.filter(e => e.tier !== "C");
+  // Follows the tab. Someone who opens AI Mode from the patches tab has asked
+  // about patches explicitly, which is exactly the condition under which
+  // recommending one is appropriate. Ranking needs `stars`, and a patch keeps
+  // its repository's count under another name.
+  let pool = state.tab === "patches"
+    ? state.index.patches.filter(e => e.tier !== "C")
+        .map(e => ({ ...e, stars: e.repo_stars || 0 }))
+    : state.index.plugins.filter(e => e.tier !== "C");
   // An active category is an explicit choice, so it is honoured -- but shown
   // in the dialog with a way out, because someone may have filtered while
   // browsing and then asked about something else entirely.
@@ -668,6 +681,7 @@ function shortlistFor(query) {
 function compact(entry) {
   const out = {
     id: entry.id,
+    ...(entry.path ? { patch_file: entry.path, load_order: entry.order } : {}),
     purpose: (entry.purpose || entry.description || "").slice(0, 320),
     categories: entry.categories,
     stars: entry.stars,
@@ -798,8 +812,12 @@ async function runAI() {
 
   let result;
   try {
-    result = await callModel(cfg, SYSTEM_PROMPT, JSON.stringify({
+    const system = state.tab === "patches"
+      ? SYSTEM_PROMPT + " " + PATCH_RULES
+      : SYSTEM_PROMPT;
+    result = await callModel(cfg, system, JSON.stringify({
       question,
+      looking_for: state.tab === "patches" ? "user patches" : "plugins",
       candidates: candidates.map(compact),
       known_confusions: relevant.map(d => ({ between: d.between, note: d.say }))
     }));
@@ -1208,14 +1226,16 @@ function setupAI() {
 
   const renderScope = () => {
     const pool = aiPool();
-    const label = (state.index.categories || []).find(c => c.id === state.category);
+    const cats = state.tab === "patches" ? (state.patchCategories || []) : (state.index.categories || []);
+    const label = cats.find(c => c.id === state.category);
     // Says what will actually be searched, and never claims the filter saves
     // money: the shortlist is capped either way, so narrowing changes which
     // candidates the model sees, not how many.
+    const kind = state.tab === "patches" ? "patches" : "plugins";
     $("aiScope").innerHTML = (state.category && state.aiUseFilter)
-      ? `Searching <b>${pool.length}</b> plugins in <b>${esc(label ? label.label : state.category)}</b>.
+      ? `Searching <b>${pool.length}</b> ${kind} in <b>${esc(label ? label.label : state.category)}</b>.
          <button class="linkish" id="aiScopeAll">Search all instead</button>`
-      : `Searching all <b>${pool.length}</b> plugins${state.category
+      : `Searching all <b>${pool.length}</b> ${kind}${state.category
           ? ` — ignoring the ${esc(label ? label.label : state.category)} filter.
               <button class="linkish" id="aiScopeNarrow">Use it</button>` : ""}`;
     const all = $("aiScopeAll"), narrow = $("aiScopeNarrow");
@@ -1227,6 +1247,9 @@ function setupAI() {
   // keyword filter, the chips and the browse list are all inapplicable, and
   // leaving them behind a scrim only invites clicking them.
   const openDialog = () => {
+    $("aiHeading").textContent = state.tab === "patches"
+      ? "Describe what you need — searching patches"
+      : "Describe what you need";
     $("browseView").hidden = true;
     $("aiView").hidden = false;
     renderScope();
