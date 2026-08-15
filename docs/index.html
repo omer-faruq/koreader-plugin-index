@@ -64,7 +64,16 @@ body {
 }
 .wrap { max-width: 860px; margin: 0 auto; padding: 24px 20px 72px; }
 
-header { margin-bottom: 22px; }
+header { margin-bottom: 22px; position: relative; }
+/* The palette was theme-aware from the start and followed the system; this
+   only adds the override, for a reader whose system setting is not what
+   they want in front of a book catalogue at night. */
+#themeToggle {
+  position: absolute; top: 0; right: 0; border: 1px solid var(--border);
+  background: var(--surface); border-radius: 999px; cursor: pointer;
+  font-size: .95rem; line-height: 1; padding: 7px 10px;
+}
+#themeToggle:hover { border-color: var(--accent); }
 h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
 .tagline { color: var(--muted); margin: 0 0 12px; }
 
@@ -296,6 +305,7 @@ footer a { color: var(--accent); }
 <div class="wrap">
 
 <header>
+  <button id="themeToggle" title="Switch between light and dark" aria-label="Switch theme">🌙</button>
   <h1>KOReader Plugin Finder</h1>
   <p class="tagline">Describe what you want to do. Not what the plugin is called.</p>
   <div class="freshness" id="freshness">Loading index…</div>
@@ -1128,6 +1138,30 @@ function renderFreshness() {
 }
 
 /* -------------------------------------------------------------------- boot */
+
+// Applied before boot so the page never paints in one theme and swaps.
+(function theme() {
+  const saved = localStorage.getItem("kpi.theme");
+  if (saved) document.documentElement.setAttribute("data-theme", saved);
+  const paint = () => {
+    const dark = document.documentElement.getAttribute("data-theme") === "dark"
+      || (!document.documentElement.hasAttribute("data-theme")
+          && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    document.getElementById("themeToggle").textContent = dark ? "☀️" : "🌙";
+  };
+  document.addEventListener("DOMContentLoaded", () => {
+    paint();
+    document.getElementById("themeToggle").addEventListener("click", () => {
+      const dark = document.documentElement.getAttribute("data-theme") === "dark"
+        || (!document.documentElement.hasAttribute("data-theme")
+            && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      const next = dark ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", next);
+      localStorage.setItem("kpi.theme", next);
+      paint();
+    });
+  });
+})();
 
 async function boot() {
   try {
