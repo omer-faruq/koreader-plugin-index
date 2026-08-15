@@ -39,7 +39,7 @@ categories = ["ai"]
 [plugins."tachibana-shin/rakuyomi"]
 tier = "A"
 categories = ["content"]
-purpose = "Manga reader for KOReader."
+purpose = "Manga reader for KOReader: browse manga sources, download chapters and read them in KOReader itself, keeping track of what you have already read."
 
 [plugins."OctoNezd/zlibrary.koplugin"]
 tier = "A"
@@ -49,17 +49,17 @@ note = "Describes the repository's stated functionality only. Availability and l
 [plugins."AnthonyGress/zen_ui.koplugin"]
 tier = "A"
 categories = ["ui"]
-purpose = "Clean, minimal interface for KOReader."
+purpose = "Replaces KOReader's interface with a clean, minimal one, for readers who want the screen given over to the book rather than to controls."
 
 [plugins."pengcw/legado.koplugin"]
 tier = "A"
 categories = ["content"]
-purpose = "Read Legado online-library and web-novel content from KOReader."
+purpose = "Read Legado online-library and web-novel content inside KOReader, reaching the sources a Legado setup provides without leaving the reader."
 
 [plugins."Ajatt-Tools/anki.koplugin"]
 tier = "A"
 categories = ["dict"]
-purpose = "Turn words looked up in KOReader's dictionary into Anki cards."
+purpose = "Turns words looked up in KOReader's own dictionary into Anki cards through AnkiConnect, for building vocabulary from what you are actually reading."
 keywords = ["ankiconnect", "flashcards", "vocabulary", "language learning"]
 
 [plugins."gitalexcampos/highlightsync.koplugin"]
@@ -70,23 +70,23 @@ purpose = "Synchronise highlights, notes and bookmarks between devices over WebD
 [plugins."kaikozlov/localsend.koplugin"]
 tier = "A"
 categories = ["files"]
-purpose = "Send and receive files wirelessly using LocalSend."
+purpose = "Send and receive files wirelessly with LocalSend, moving books and documents between an e-reader and a phone or computer on the same network without a cable."
 
 [plugins."AndyHazz/bookends.koplugin"]
 tier = "A"
 categories = ["ui"]
-purpose = "Configurable text overlays with tokens, icons, per-line styling and presets."
+purpose = "Configurable text overlays on the reading screen, built from tokens and icons with per-line styling and saved presets, for showing progress, time or anything else while reading."
 
 [plugins."stelzch/zotero.koplugin"]
 tier = "A"
 categories = ["library"]
-purpose = "Browse Zotero collections on an e-reader."
+purpose = "Browse a Zotero library on an e-reader: open your collections and read the papers and documents in them through KOReader, for research and academic reading."
 keywords = ["reference manager", "research", "academic"]
 
 [plugins."OGKevin/kobo.koplugin"]
 tier = "A"
 categories = ["device"]
-purpose = "KOReader enhancements for Kobo devices."
+purpose = "Kobo-specific enhancements for KOReader, adding behaviour that only applies to Kobo hardware rather than changing KOReader generally."
 
 [plugins."greywolf1499/opds_plus.koplugin"]
 tier = "A"
@@ -97,23 +97,23 @@ keywords = ["calibre", "catalog", "covers"]
 [plugins."JoeBumm/Koreader-Menu-customizer"]
 tier = "A"
 categories = ["ui"]
-purpose = "Hide menus and plugins to focus the interface on reading."
+purpose = "Hides individual menus and plugins from KOReader's interface, so the menus keep only what you actually use. Simplifies the existing interface rather than replacing it."
 
 [plugins."dani84bs/AnnotationSync.koplugin"]
 tier = "A"
 categories = ["sync"]
-purpose = "Synchronise KOReader annotations between devices."
+purpose = "Synchronises KOReader annotations between devices, so highlights and notes made on one reader are present on the next one you pick up."
 
 [plugins."iceyear/readeck.koplugin"]
 tier = "A"
 categories = ["web"]
-purpose = "Read content saved to a Readeck server from KOReader."
+purpose = "Reads articles saved to a Readeck server you run yourself, bringing a read-later queue onto the e-reader. Requires an existing Readeck instance."
 keywords = ["read later", "save articles", "reading list"]
 
 [plugins."mysticknits/pencil.koplugin"]
 tier = "A"
 categories = ["device", "ui"]
-purpose = "Stylus support for taking handwritten notes in EPUBs on Kobo Libra Color."
+purpose = "Stylus support for handwritten notes in EPUBs, on the Kobo Libra Color specifically. Requires that hardware; it does nothing on devices without a pen."
 
 # ---------------------------------------------------------------- distinctions
 #
