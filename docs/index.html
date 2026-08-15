@@ -318,7 +318,7 @@ footer a { color: var(--accent); }
 
 <div class="toolbar">
   <label><input type="checkbox" id="showC"> Include dormant, forks and stubs</label>
-  <label id="deepWrap"><input type="checkbox" id="deepSearch"> Search inside READMEs <span id="deepState"></span></label>
+  <label id="deepWrap"><input type="checkbox" id="deepSearch" checked> Search inside READMEs <span id="deepState"></span></label>
   <span id="count"></span>
 </div>
 
@@ -1162,6 +1162,7 @@ async function boot() {
   $("q").addEventListener("input", e => {
     state.query = e.target.value;
     $("clear").hidden = !state.query;
+    if ($("deepSearch").checked) loadReadmes();
     // Last answer belongs to the previous question; leaving it on screen while
     // the results underneath change is worse than showing nothing.
     clearTimeout(timer);
@@ -1172,31 +1173,40 @@ async function boot() {
   });
   $("showC").addEventListener("change", e => { state.showC = e.target.checked; render(); });
 
-  $("deepSearch").addEventListener("change", async e => {
-    const attach = on => {
-      for (const entry of state.index.plugins) {
-        if (on && state.readmes) entry.readme = state.readmes[entry.id] || "";
-        else delete entry.readme;
-      }
-    };
-
-    if (!e.target.checked) { attach(false); $("deepState").textContent = ""; render(); return; }
-    if (state.readmes) { attach(true); render(); return; }
-
+  // Fetched when someone first types, not when the page loads. It is 600 KB,
+  // and a reader who only browses the categories should not pay for it; by the
+  // time a query is finished it has usually arrived, and the results re-render
+  // when it does.
+  async function loadReadmes(silent) {
+    if (state.readmes || state.readmesFailed) return;
     $("deepState").textContent = "(loading…)";
     try {
       const resp = await fetch("readme-index.json", { cache: "force-cache" });
       if (!resp.ok) throw new Error(resp.status);
       state.readmes = (await resp.json()).readmes || {};
-      attach(true);
+      for (const entry of state.index.plugins) entry.readme = state.readmes[entry.id] || "";
       $("deepState").textContent = `(${Object.keys(state.readmes).length} READMEs)`;
-    } catch (err) {
-      // Deep search is an enhancement; losing it must not break the page.
-      state.readmes = null;
-      e.target.checked = false;
+      render();
+    } catch {
+      state.readmesFailed = true;
+      $("deepSearch").checked = false;
       $("deepState").textContent = "(unavailable)";
     }
-    render();
+  }
+
+  $("deepSearch").addEventListener("change", async e => {
+    if (!e.target.checked) {
+      for (const entry of state.index.plugins) delete entry.readme;
+      $("deepState").textContent = "";
+      render();
+      return;
+    }
+    if (state.readmes) {
+      for (const entry of state.index.plugins) entry.readme = state.readmes[entry.id] || "";
+      render();
+      return;
+    }
+    await loadReadmes();
   });
 
   setupAI();
