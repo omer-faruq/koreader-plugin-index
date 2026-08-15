@@ -133,6 +133,8 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
 }
 #aiQuestion:focus { outline: none; border-color: var(--accent); }
 .kbd-hint { font-size: .76rem; color: var(--muted); }
+.scope { font-size: .8rem; color: var(--muted); margin: 10px 0 0; }
+.scope b { color: var(--text); font-weight: 600; }
 .field-hint { font-size: .74rem; color: var(--muted); line-height: 1.4; }
 .field-hint code { background: var(--surface-2); padding: 1px 4px; border-radius: 3px; }
 .modal-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; font-size: .82rem; color: var(--muted); }
@@ -292,6 +294,8 @@ footer a { color: var(--accent); }
 
     <textarea id="aiQuestion" rows="4"
       placeholder="Write it however you like, in any language.&#10;&#10;e.g. I read on two devices and want my highlights and notes to end up in the same place, without paying for a service."></textarea>
+
+    <p class="scope" id="aiScope"></p>
 
     <div class="modal-actions">
       <button class="btn" id="aiAsk">Ask</button>
@@ -474,7 +478,8 @@ function explain(entry, tokens) {
 
 // `readmes` stays null until the deep-search box is ticked. It is roughly a
 // megabyte, and most searches are answered without it.
-const state = { index: null, tab: "plugins", query: "", category: null, showC: false, readmes: null };
+const state = { index: null, tab: "plugins", query: "", category: null, showC: false,
+                readmes: null, aiUseFilter: true };
 
 const isPatch = entry => Boolean(entry.path);
 const cssId = id => id.replace(/[^a-zA-Z0-9]/g, "_");
@@ -506,7 +511,11 @@ const PROVIDERS = {
   custom:     { url: "", model: "", shape: "openai" }
 };
 
-const SHORTLIST = 25;
+// Each candidate costs roughly 90 tokens, so 40 is about 3.6k per request --
+// a fraction of a cent anywhere. The real risk is the opposite: the right
+// answer ranking 26th and never reaching the model at all. Keyword ranking is
+// the weak link this layer exists to cover, so the net is worth widening.
+const SHORTLIST = 40;
 
 const SYSTEM_PROMPT = [
   "You help people find KOReader plugins.",
@@ -521,9 +530,20 @@ const SYSTEM_PROMPT = [
 
 const SHORTLIST_FLOOR = 10;
 
+function aiPool() {
+  let pool = state.index.plugins.filter(e => e.tier !== "C");
+  // An active category is an explicit choice, so it is honoured -- but shown
+  // in the dialog with a way out, because someone may have filtered while
+  // browsing and then asked about something else entirely.
+  if (state.category && state.aiUseFilter) {
+    pool = pool.filter(e => (e.categories || []).includes(state.category));
+  }
+  return pool;
+}
+
 function shortlistFor(query) {
   const tokens = tokenise(query);
-  const pool = state.index.plugins.filter(e => e.tier !== "C");
+  const pool = aiPool();
   const matched = pool.map(e => [score(e, tokens), e])
     .filter(p => p[0] > 0)
     .sort((a, b) => b[0] - a[0])
@@ -993,8 +1013,26 @@ function setupAI() {
   const say = text => { $("aiStatusText").textContent = text; };
   if (cfg.key) say(`Using ${cfg.provider}`);
 
+  const renderScope = () => {
+    const pool = aiPool();
+    const label = (state.index.categories || []).find(c => c.id === state.category);
+    // Says what will actually be searched, and never claims the filter saves
+    // money: the shortlist is capped either way, so narrowing changes which
+    // candidates the model sees, not how many.
+    $("aiScope").innerHTML = (state.category && state.aiUseFilter)
+      ? `Searching <b>${pool.length}</b> plugins in <b>${esc(label ? label.label : state.category)}</b>.
+         <button class="linkish" id="aiScopeAll">Search all instead</button>`
+      : `Searching all <b>${pool.length}</b> plugins${state.category
+          ? ` — ignoring the ${esc(label ? label.label : state.category)} filter.
+              <button class="linkish" id="aiScopeNarrow">Use it</button>` : ""}`;
+    const all = $("aiScopeAll"), narrow = $("aiScopeNarrow");
+    if (all) all.addEventListener("click", () => { state.aiUseFilter = false; renderScope(); });
+    if (narrow) narrow.addEventListener("click", () => { state.aiUseFilter = true; renderScope(); });
+  };
+
   const openDialog = () => {
     $("aiDialog").hidden = false;
+    renderScope();
     // Whatever is in the filter box is a reasonable starting point, but only
     // as a seed -- from here on the two inputs are independent.
     if (!$("aiQuestion").value && state.query.trim()) $("aiQuestion").value = state.query.trim();
