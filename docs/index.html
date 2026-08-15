@@ -129,6 +129,7 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
 .kbd-hint { font-size: .76rem; color: var(--muted); }
 .scope { font-size: .8rem; color: var(--muted); margin: 10px 0 0; }
 .scope b { color: var(--text); font-weight: 600; }
+.scope-why { display: block; margin-top: 3px; font-size: .76rem; }
 .field-hint { font-size: .74rem; color: var(--muted); line-height: 1.4; }
 .field-hint code { background: var(--surface-2); padding: 1px 4px; border-radius: 3px; }
 .modal-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; font-size: .82rem; color: var(--muted); }
@@ -1251,11 +1252,20 @@ function setupAI() {
     // money: the shortlist is capped either way, so narrowing changes which
     // candidates the model sees, not how many.
     const kind = state.tab === "patches" ? "patches" : "plugins";
+    const everything = state.tab === "patches" ? state.index.patches : state.index.plugins;
+    // The header counts the whole catalogue and this counts what the model
+    // will see, so the gap needs naming -- two different numbers on one screen
+    // otherwise read as one of them being wrong.
+    const skipped = everything.filter(e => e.tier === "C").length;
+    const why = skipped
+      ? ` <span class="scope-why">${skipped} dormant, archived or undocumented
+          ${kind} are left out.</span>`
+      : "";
     $("aiScope").innerHTML = (state.category && state.aiUseFilter)
       ? `Searching <b>${pool.length}</b> ${kind} in <b>${esc(label ? label.label : state.category)}</b>.
-         <button class="linkish" id="aiScopeAll">Search all instead</button>`
-      : `Searching all <b>${pool.length}</b> ${kind}${state.category
-          ? ` — ignoring the ${esc(label ? label.label : state.category)} filter.
+         <button class="linkish" id="aiScopeAll">Search all instead</button>${why}`
+      : `Searching <b>${pool.length}</b> of ${everything.length} ${kind}.${why}${state.category
+          ? ` Ignoring the ${esc(label ? label.label : state.category)} filter.
               <button class="linkish" id="aiScopeNarrow">Use it</button>` : ""}`;
     const all = $("aiScopeAll"), narrow = $("aiScopeNarrow");
     if (all) all.addEventListener("click", () => { state.aiUseFilter = false; renderScope(); });
