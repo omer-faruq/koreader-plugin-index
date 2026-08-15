@@ -1,5 +1,7 @@
 # koreader-plugin-index
 
+[![Build index](https://github.com/omer-faruq/koreader-plugin-index/actions/workflows/build.yml/badge.svg)](https://github.com/omer-faruq/koreader-plugin-index/actions/workflows/build.yml?query=event%3Aschedule)
+
 A self-maintaining index of community KOReader plugins and user patches, and a
 search page built on it.
 
@@ -86,6 +88,22 @@ python scripts/test_queries.py
 
 In Actions no token needs to be created: the workflow's own `GITHUB_TOKEN`
 covers it.
+
+## Watching it run
+
+The nightly diff runs at 03:00 UTC and a full rebuild on the first of the
+month. Three ways to know it is still working, in order of effort:
+
+- The badge above, and [the scheduled runs](https://github.com/omer-faruq/koreader-plugin-index/actions/workflows/build.yml?query=event%3Aschedule).
+- GitHub emails the repository owner when a scheduled run fails on the default
+  branch, so silence is the good outcome.
+- The search page prints the index date at the top. If it is not today's, the
+  last run did not publish — the same line that tells readers how fresh the
+  data is doubles as the health check.
+
+A run that fails partway leaves the previous version up: the sanity check
+aborts publishing if either the plugin or the patch count drops by more than
+30%, rather than shipping a collapsed catalogue.
 
 ## Status
 
