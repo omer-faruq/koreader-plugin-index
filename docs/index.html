@@ -128,6 +128,7 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
   border: 1px solid var(--border); border-radius: 10px; resize: vertical;
 }
 #aiQuestion:focus { outline: none; border-color: var(--accent); }
+.kbd-hint { font-size: .76rem; color: var(--muted); }
 .modal-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; font-size: .82rem; color: var(--muted); }
 #aiOut:not(:empty) { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 14px; }
 
@@ -284,10 +285,11 @@ footer a { color: var(--accent); }
     </div>
 
     <textarea id="aiQuestion" rows="4"
-      placeholder="Write it however you like — in any language.&#10;&#10;e.g. I read on two devices and want my highlights and notes to end up in the same place, without paying for a service."></textarea>
+      placeholder="Write it however you like, in any language.&#10;&#10;e.g. I read on two devices and want my highlights and notes to end up in the same place, without paying for a service."></textarea>
 
     <div class="modal-actions">
       <button class="btn" id="aiAsk">Ask</button>
+      <span class="kbd-hint">Enter to send · Shift+Enter for a new line</span>
       <button class="linkish" id="aiSettingsToggle">Provider settings</button>
       <span id="aiStatusText"></span>
     </div>
@@ -982,10 +984,11 @@ function setupAI() {
   });
 
   $("aiAsk").addEventListener("click", runAI);
-  // Ctrl/Cmd+Enter submits; plain Enter stays a newline, because the whole
-  // point of this box is room to write more than a line.
+  // Enter sends, Shift+Enter breaks the line -- the convention every chat box
+  // has trained people into, and these questions are almost always one
+  // paragraph rather than several.
   $("aiQuestion").addEventListener("keydown", e => {
-    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); runAI(); }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); runAI(); }
   });
 
   $("aiProvider").addEventListener("change", fill);
