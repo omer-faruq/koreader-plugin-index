@@ -1163,6 +1163,22 @@ function renderFreshness() {
   });
 })();
 
+// Keeps the address bar honest about which mode and tab you are in, so the page
+// can be reloaded, bookmarked or sent to someone and come back the same.
+// replaceState rather than pushState: switching modes is not a navigation and
+// should not put a stop on the back button between here and the page before.
+//
+// Top level, not inside boot(): setupAI is its own function, so the calls from
+// the mode switch could not see it there and threw on every click -- the mode
+// opened, the URL never changed, and nothing said why.
+function syncUrl() {
+  const params = new URLSearchParams();
+  if (!$("aiView").hidden) params.set("ai", "1");
+  if (state.tab === "patches") params.set("tab", "patches");
+  const query = params.toString();
+  history.replaceState(null, "", query ? `?${query}` : location.pathname);
+}
+
 async function boot() {
   try {
     const resp = await fetch("index.json", { cache: "no-cache" });
@@ -1183,18 +1199,6 @@ async function boot() {
   state.index.patches = state.index.patches || [];
   renderFreshness();
   renderChips();
-
-  // Keeps the address bar honest about which mode and tab you are in, so the
-  // page can be reloaded, bookmarked or sent to someone and come back the same.
-  // replaceState rather than pushState: switching modes is not a navigation and
-  // should not put a stop on the back button between here and the page before.
-  function syncUrl() {
-    const params = new URLSearchParams();
-    if (!$("aiView").hidden) params.set("ai", "1");
-    if (state.tab === "patches") params.set("tab", "patches");
-    const query = params.toString();
-    history.replaceState(null, "", query ? `?${query}` : location.pathname);
-  }
 
   // Extracted so a link can land on a tab as well as a click. The AppStore page
   // sends people here with ?tab=patches when that is what they were browsing.
