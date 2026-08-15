@@ -439,6 +439,7 @@ footer a { color: var(--accent); }
       </div>
       <div class="panel-actions">
         <button class="btn" id="aiSave">Save</button>
+        <button class="btn ghost" id="aiTest">Test connection</button>
         <button class="btn ghost" id="aiClear">Forget key</button>
       </div>
 
@@ -859,8 +860,21 @@ async function callModel(cfg, system, user) {
     };
   }
 
-  const resp = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
-  if (!resp.ok) throw new Error(`${resp.status} ${(await resp.text()).slice(0, 200)}`);
+  let resp;
+  try {
+    resp = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
+  } catch (err) {
+    // A provider refusing browser origins and a dead network are the same
+    // exception here, and neither says anything useful on its own.
+    const blocked = new Error("blocked");
+    blocked.kind = "blocked";
+    throw blocked;
+  }
+  if (!resp.ok) {
+    const failed = new Error(`${resp.status} ${(await resp.text()).slice(0, 200)}`);
+    failed.status = resp.status;
+    throw failed;
+  }
   const data = await resp.json();
 
   const text = preset.shape === "anthropic" ? (data.content || []).map(p => p.text).join("")
@@ -872,6 +886,42 @@ async function callModel(cfg, system, user) {
   const cleaned = text.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
   try { return JSON.parse(cleaned); }
   catch { throw new Error("the model did not return usable JSON"); }
+}
+
+// Names which of the three things went wrong, because they are indistinguishable
+// from the outside and lead to opposite fixes: regenerating a key that was fine,
+// or hunting a model name when the provider simply will not answer a browser.
+function describeFailure(err) {
+  if (err.kind === "blocked") {
+    return ["This provider refuses requests made straight from a browser.",
+            "That is its policy, not a problem with your key — try another provider."];
+  }
+  if (err.status === 401 || err.status === 403) {
+    return ["The provider rejected the key.",
+            "Check it was copied whole, and that it is a key for this provider."];
+  }
+  if (err.status === 404) {
+    return ["The provider has no such model or endpoint.",
+            "Check the model name; for a custom URL, it must be the full chat-completions path."];
+  }
+  if (err.status === 429) {
+    return ["Rate limited or out of credit.", "The key works; the account cannot spend right now."];
+  }
+  if (err.status >= 500) {
+    return ["The provider had an error of its own.", "Nothing to fix here — try again shortly."];
+  }
+  if (/usable JSON/.test(err.message)) {
+    return ["Connected, but the model did not reply in JSON.",
+            "The key and endpoint are fine. A larger or more recent model will do better."];
+  }
+  return ["The request failed.", err.message.slice(0, 160)];
+}
+
+async function testConnection(cfg) {
+  const out = await callModel(cfg,
+    'Reply with JSON only, exactly: {"terms":["ok"]}',
+    JSON.stringify({ question: "connection test" }));
+  return Array.isArray(out.terms);
 }
 
 async function expandQuery(cfg, question) {
@@ -926,14 +976,11 @@ async function runAI() {
       known_confusions: relevant.map(d => ({ between: d.between, note: d.say }))
     }));
   } catch (err) {
-    // A browser-origin block is by far the likeliest failure and says nothing
-    // useful on its own, so name it rather than showing a bare "Failed to fetch".
-    const blocked = /failed to fetch|networkerror|load failed/i.test(err.message);
-    $("aiOut").innerHTML = `<div class="note"><b>The request did not go through</b>${
-      blocked
-        ? "The provider appears to refuse requests made straight from a browser. That is a provider-side policy, not a key problem — try another provider, or use the knowledge base with your own assistant."
-        : esc(err.message)
-    }</div>`;
+    // Same diagnosis as the settings test, so a failure reads the same way
+    // wherever it surfaces.
+    const [what, detail] = describeFailure(err);
+    $("aiOut").innerHTML =
+      `<div class="note"><b>${esc(what)}</b>${esc(detail)}</div>`;
     return;
   }
 
@@ -1538,6 +1585,30 @@ function setupAI() {
     $("aiPanel").hidden = true;
     if ($("aiQuestion").value.trim()) runAI();
   });
+  // Tests the values in the form rather than the saved ones, so a key can be
+  // checked before it is stored.
+  $("aiTest").addEventListener("click", async () => {
+    const cfg = {
+      provider: $("aiProvider").value,
+      model: $("aiModel").value.trim(),
+      url: $("aiUrl").value.trim(),
+      key: $("aiKey").value.trim()
+    };
+    if (!cfg.key) { say("Enter a key first."); return; }
+    $("aiTest").disabled = true;
+    say("Testing…");
+    try {
+      await testConnection(cfg);
+      const preset = PROVIDERS[cfg.provider] || PROVIDERS.custom;
+      say(`Works — ${cfg.provider}, ${cfg.model || preset.model}.`);
+    } catch (err) {
+      const [what, detail] = describeFailure(err);
+      say(`${what} ${detail}`);
+    } finally {
+      $("aiTest").disabled = false;
+    }
+  });
+
   $("aiClear").addEventListener("click", () => {
     localStorage.removeItem("kpi.ai");
     $("aiKey").value = "";
