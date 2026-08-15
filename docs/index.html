@@ -714,11 +714,12 @@ const EXPAND_PROMPT = [
   "'web search', 'search web' and 'online search' are one word, `search`, three times over.",
   "Never include 'koreader', 'plugin' or 'ereader' — every entry has them and they",
   "distinguish nothing. Six to twelve terms, no explanation.",
-  // No category is asked for. Category names are already among the fields the
-  // local scorer matches, so a term like "sync" reaches the category anyway,
-  // and a hard category choice here would risk excluding the right answer the
-  // way the taxonomy's own 20% miscellaneous rate suggests it would.
-  'JSON only: {"terms":["..."]}'
+  // The language is asked for and used; no category is, because category names
+  // are already among the fields the local scorer matches, and a hard category
+  // choice here would risk excluding the right answer the way the taxonomy's
+  // own 20% miscellaneous rate suggests it would.
+  "Also name the language the question is written in, in English.",
+  'JSON only: {"terms":["..."],"language":"English"}'
 ].join(" ");
 
 const PATCH_RULES = [
@@ -735,7 +736,13 @@ const SYSTEM_PROMPT = [
   "answers questions about highlighted text does not synchronise highlights between devices.",
   "Never name anything outside the shortlist. Never claim a capability the purpose does not state.",
   "If nothing fits, return an empty list.",
-  "Write every reason in the same language the question was asked in.",
+  // Named outright rather than left to the model to work out. "Reply in the
+  // same language as the question" put the detection inside a long prompt and
+  // lost to a model's own default -- DeepSeek answered English questions in
+  // Chinese. Stage one already reads the question, so it does the detecting and
+  // this instruction gets a concrete language.
+  "Write every reason in {LANGUAGE}. This is not negotiable, whatever language",
+  "the plugin descriptions are written in.",
   'Reply with JSON only: {"picks":[{"id":"owner/repo","why":"one short sentence"}],"note":"optional one sentence"}'
 ].join(" ");
 
@@ -942,7 +949,9 @@ async function expandQuery(cfg, question) {
   try {
     const out = await callModel(cfg, EXPAND_PROMPT, JSON.stringify({ question }));
     const terms = (out.terms || []).filter(t => typeof t === "string");
-    return terms.length ? terms : null;
+    const language = typeof out.language === "string" && /^[A-Za-z ]{3,20}$/.test(out.language)
+      ? out.language.trim() : null;
+    return terms.length || language ? { terms, language } : null;
   } catch {
     // Stage one is an improvement, not a requirement. If it fails, retrieval
     // falls back to the raw question exactly as before.
@@ -964,7 +973,9 @@ async function runAI() {
   // two are independent inputs and writing a paragraph must not disturb the
   // list behind the dialog.
   $("aiOut").innerHTML = `<div class="state">Reading the question…</div>`;
-  const terms = await expandQuery(cfg, question);
+  const expanded = await expandQuery(cfg, question);
+  const terms = expanded && expanded.terms.length ? expanded.terms : null;
+  const language = (expanded && expanded.language) || "the language of the question";
   const retrievalQuery = terms ? terms.join(" ") + " " + question : question;
 
   const candidates = shortlistFor(retrievalQuery);
@@ -981,7 +992,9 @@ async function runAI() {
 
   let result;
   try {
-    const base = SYSTEM_PROMPT.replace("{PICKS}", String(tuning().picks));
+    const base = SYSTEM_PROMPT
+      .replace("{PICKS}", String(tuning().picks))
+      .replace("{LANGUAGE}", language);
     const system = state.tab === "patches" ? base + " " + PATCH_RULES : base;
     result = await callModel(cfg, system, JSON.stringify({
       question,
