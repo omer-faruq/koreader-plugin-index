@@ -62,7 +62,12 @@ def extract_purpose(readme, limit=320, enough=110):
             continue
         if line.startswith("#") or BADGE_RE.match(line):
             continue
-        if line.startswith(("|", ">", "---", "===", "* ", "- ", "1. ")):
+        if line.startswith(("|", ">", "---", "===", "* ", "- ", "+ ")):
+            continue
+        # Any numbered step, not just the first. Skipping only "1. " let the
+        # rest of an install list walk into a plugin's stated purpose:
+        # "…displays weather on your sleep screen. 2. Extract the folder 3."
+        if re.match(r"^\d+[.)]\s", line):
             continue
         # Language switcher rows -- "English | 中文 | Español" -- sit above the
         # real first paragraph in bilingual READMEs and are not prose. Taking
@@ -131,10 +136,36 @@ def extract_features(readme, limit=10, per_item=130, total=760):
     return out
 
 
+# Sections every README has, about the repository rather than the plugin.
+# Feeding them to categorisation reads housekeeping as capability: a weather
+# plugin landed in "Dictionary & language" because its README explains how its
+# own interface gets translated.
+HOUSEKEEPING_HEADING = re.compile(
+    r"^(install|usage|configur|setup|getting started|contribut|licen[cs]e|credit|"
+    r"thanks|acknowledg|changelog|change log|roadmap|todo|faq|requirement|"
+    r"screenshot|author|related|localis|localiz|translat|support|donate|"
+    r"disclaimer|table of contents|troubleshoot|development|building|api information|"
+    r"how it works)", re.IGNORECASE)
+
+# The same idea, but matched anywhere in a heading rather than at the start:
+# "What Gets Translated and How" and "Current Translation Status" are both
+# about a plugin's own interface, and neither begins with the giveaway word.
+HOUSEKEEPING_ANYWHERE = re.compile(
+    r"(translat|localis|localiz|contribut|licen[cs]e|changelog|acknowledg|"
+    r"sponsor|donate)", re.IGNORECASE)
+
+
 def extract_headings(readme, limit=25):
     if not readme:
         return []
     return [h.strip() for h in HEADING_RE.findall(clean_markdown(readme))][:limit]
+
+
+def feature_headings(headings):
+    """Headings that say what the plugin does, housekeeping dropped."""
+    return [h for h in headings
+            if not HOUSEKEEPING_HEADING.match(h)
+            and not HOUSEKEEPING_ANYWHERE.search(h)]
 
 
 # --------------------------------------------------------------- lua patch text

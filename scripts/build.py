@@ -158,7 +158,8 @@ def build_plugin(node, curation):
         # that state identity; body terms stay in keywords, where breadth is
         # exactly what search wants.
         "categories": extract.categorise(
-            " ".join([description] + headings), topics, node["name"]
+            " ".join([description] + extract.feature_headings(headings)),
+            topics, node["name"]
         ),
         # What a plugin can actually do usually lives in the feature list, not
         # the opening slogan. Carried in the index so every consumer gets it.
