@@ -561,12 +561,16 @@ function aiPool() {
 function shortlistFor(query) {
   const tokens = tokenise(query);
   const pool = aiPool();
-  const matched = pool.map(e => [score(e, tokens), e])
-    .filter(p => p[0] > 0)
-    .sort((a, b) => b[0] - a[0])
-    .slice(0, SHORTLIST)
-    .map(p => p[1]);
+  const matched = dedupeVariants(
+    pool.map(e => [score(e, tokens), e])
+      .filter(p => p[0] > 0)
+      .sort((a, b) => b[0] - a[0])
+      .map(p => p[1])
+  ).slice(0, SHORTLIST);
 
+  // Deduping happens again after any top-up. Doing it only here let the
+  // fallback undo it: collapsing four forks dropped the count below the floor,
+  // and the filler then put the same four back.
   if (matched.length >= SHORTLIST_FLOOR) return matched;
 
   // Keyword retrieval is monolingual: the index is English, so a question
@@ -579,18 +583,48 @@ function shortlistFor(query) {
   const filler = pool
     .filter(e => !have.has(e.id))
     .sort((a, b) => (TIER_BONUS[b.tier] - TIER_BONUS[a.tier]) || (b.stars - a.stars));
-  return matched.concat(filler.slice(0, SHORTLIST - matched.length));
+  return dedupeVariants(matched.concat(filler)).slice(0, SHORTLIST);
 }
 
 function compact(entry) {
-  return {
+  const out = {
     id: entry.id,
-    purpose: (entry.purpose || entry.description || "").slice(0, 260),
+    purpose: (entry.purpose || entry.description || "").slice(0, 320),
     categories: entry.categories,
     stars: entry.stars,
     status: entry.activity,
     reviewed: entry.tier === "A"
   };
+  // The opening line is often a slogan; the capability that answers a question
+  // is in the feature list. Without these, KOAssistant went to the model as
+  // "Powerful, customizable AI assistant" and was correctly skipped for a
+  // translation question its README documents in a bullet.
+  //
+  // Roughly 1 KB per candidate, so 40 of them cost about 10k input tokens --
+  // three tenths of a cent, or some three hundred questions to the dollar.
+  // Cost is not the constraint here; sending too little was the mistake. Raw
+  // README paragraphs would cost the same and spend most of it on install
+  // steps, which is why this is the feature list rather than more prose.
+  if (entry.features && entry.features.length) out.features = entry.features.slice(0, 10);
+  // Named so the model can prefer an original over a copy of it.
+  if (entry.is_fork) out.fork_of_another_project = true;
+  return out;
+}
+
+// Forks of a popular plugin keep its README verbatim, so a shortlist can fill
+// with copies of one project -- a translation question returned four forks of
+// the same assistant. Same opening text means same plugin for ranking
+// purposes; keep the one with the most users.
+function dedupeVariants(entries) {
+  const seen = new Map();
+  for (const entry of entries) {
+    const text = (entry.purpose || entry.description || "").toLowerCase();
+    const key = text.replace(/[^a-z0-9]+/g, " ").trim().slice(0, 90);
+    if (!key) { seen.set(entry.id, entry); continue; }
+    const kept = seen.get(key);
+    if (!kept || (entry.stars || 0) > (kept.stars || 0)) seen.set(key, entry);
+  }
+  return [...seen.values()];
 }
 
 function aiConfig() {

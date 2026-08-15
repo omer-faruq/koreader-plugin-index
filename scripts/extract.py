@@ -32,6 +32,9 @@ def clean_markdown(text):
     # switcher filter for exactly this reason and became a plugin's stated
     # purpose.
     text = html.unescape(text)
+    # Emphasis markers are not content and were reaching every consumer as
+    # literal asterisks: "**Powerful, customizable AI assistant**".
+    text = re.sub(r"\*\*|__(?=\w)|(?<=\w)__", "", text)
     return text
 
 
@@ -82,6 +85,50 @@ def extract_purpose(readme, limit=320, enough=110):
         cut = text[:limit].rsplit(" ", 1)[0]
         text = cut + "…"
     return text
+
+
+BULLET_RE = re.compile(r"^\s*(?:[-*+]|\d+\.)\s+(.{6,})$")
+EMPHASIS_RE = re.compile(r"(\*\*|__|`)")
+SKIP_BULLET = re.compile(
+    r"^(install|download|copy|clone|extract|unzip|restart|see |read the|refer|"
+    r"licen[cs]e|contribut|credit|thanks|todo|changelog|version|require|"
+    r"tested on|screenshot)", re.IGNORECASE)
+
+
+def extract_features(readme, limit=10, per_item=130, total=760):
+    """The feature bullets, which is where a plugin says what it does.
+
+    The opening paragraph is often a slogan -- KOAssistant's is "Powerful,
+    customizable AI assistant for KOReader" -- while the capability that
+    answers a real question sits in a list further down: "Highlight text ->
+    translate, explain, define words". Purpose extraction skips list markup by
+    design, so that content reached no consumer at all and the plugin was
+    invisible to anyone asking about translation.
+
+    Installation and housekeeping bullets are dropped; they describe the repo,
+    not the plugin.
+    """
+    if not readme:
+        return []
+    out, seen = [], set()
+    for raw in clean_markdown(readme).splitlines():
+        match = BULLET_RE.match(raw)
+        if not match:
+            continue
+        item = EMPHASIS_RE.sub("", match.group(1)).strip(" .;:")
+        item = re.sub(r"\s+", " ", item)
+        if len(item) < 6 or SKIP_BULLET.match(item):
+            continue
+        if len(item) > per_item:
+            item = item[:per_item].rsplit(" ", 1)[0] + "…"
+        key = item.lower()[:40]
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(item)
+        if len(out) >= limit or sum(len(x) for x in out) >= total:
+            break
+    return out
 
 
 def extract_headings(readme, limit=25):

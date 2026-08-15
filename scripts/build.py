@@ -142,6 +142,7 @@ def build_plugin(node, curation):
     # search file: the sentence that says what a plugin does is usually well
     # past the first paragraph.
     body_terms = extract.readme_terms(readme)
+    features = extract.extract_features(readme)
 
     entry = {
         "id": node["nameWithOwner"],
@@ -159,7 +160,11 @@ def build_plugin(node, curation):
         "categories": extract.categorise(
             " ".join([description] + headings), topics, node["name"]
         ),
-        "keywords": extract.keywords(description, topics, headings, extra=body_terms),
+        # What a plugin can actually do usually lives in the feature list, not
+        # the opening slogan. Carried in the index so every consumer gets it.
+        "features": features,
+        "keywords": extract.keywords(description, topics, headings,
+                                     extra=body_terms + features),
         "topics": topics,
         "stars": node["stargazerCount"],
         "forks": node["forkCount"],
