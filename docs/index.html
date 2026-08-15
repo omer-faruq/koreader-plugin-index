@@ -85,17 +85,51 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
 
 .searchbar { position: relative; margin: 16px 0 14px; }
 #q {
-  width: 100%; padding: 15px 44px 15px 16px; font-size: 1.05rem;
+  /* Right padding leaves room for the AI Mode pill that sits inside the field. */
+  width: 100%; padding: 15px 152px 15px 16px; font-size: 1.05rem;
   color: var(--text); background: var(--surface);
-  border: 1.5px solid var(--border); border-radius: var(--radius);
+  border: 1.5px solid var(--border); border-radius: 999px;
   box-shadow: var(--shadow);
 }
 #q:focus { outline: none; border-color: var(--accent); }
+#q::-webkit-search-cancel-button { display: none; }
 #clear {
-  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  position: absolute; right: 124px; top: 50%; transform: translateY(-50%);
   border: 0; background: transparent; color: var(--muted);
-  font-size: 1.3rem; cursor: pointer; padding: 4px 8px; line-height: 1;
+  font-size: 1.3rem; cursor: pointer; padding: 4px 6px; line-height: 1;
 }
+#askAi {
+  position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--border); background: var(--bg); color: var(--accent);
+  border-radius: 999px; padding: 8px 15px 8px 12px;
+  font-size: .88rem; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+#askAi:hover { border-color: var(--accent); background: var(--accent-soft); }
+#askAi svg { width: 16px; height: 16px; fill: currentColor; }
+
+.modal {
+  position: fixed; inset: 0; z-index: 50; display: flex;
+  align-items: flex-start; justify-content: center;
+  padding: 6vh 16px 24px; background: rgba(0,0,0,.45);
+  overflow-y: auto;
+}
+.modal-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; box-shadow: 0 12px 40px rgba(0,0,0,.25);
+  width: 100%; max-width: 680px; padding: 20px;
+}
+.modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.modal-head h2 { margin: 0; font-size: 1.1rem; }
+.btn-x { border: 0; background: transparent; color: var(--muted); font-size: 1.5rem; cursor: pointer; line-height: 1; padding: 0 4px; }
+#aiQuestion {
+  width: 100%; padding: 12px 14px; font: inherit; font-size: .95rem;
+  color: var(--text); background: var(--bg);
+  border: 1px solid var(--border); border-radius: 10px; resize: vertical;
+}
+#aiQuestion:focus { outline: none; border-color: var(--accent); }
+.modal-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; font-size: .82rem; color: var(--muted); }
+#aiOut:not(:empty) { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 14px; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; }
 .chip {
@@ -219,8 +253,12 @@ footer a { color: var(--accent); }
 
 <div class="searchbar">
   <input id="q" type="search" autocomplete="off" autofocus
-         placeholder="e.g. sync my highlights between devices">
+         placeholder="filter by keyword — sync, manga, opds">
   <button id="clear" hidden aria-label="Clear">×</button>
+  <button id="askAi" title="Describe what you need in your own words">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3z"/><path d="M18 14l.9 2.1 2.1.9-2.1.9L18 20l-.9-2.1-2.1-.9 2.1-.9L18 14z"/></svg>
+    AI Mode
+  </button>
 </div>
 
 <div class="chips" id="chips"></div>
@@ -228,42 +266,62 @@ footer a { color: var(--accent); }
 <div class="toolbar">
   <label><input type="checkbox" id="showC"> Include dormant, forks and stubs</label>
   <label id="deepWrap"><input type="checkbox" id="deepSearch"> Search inside READMEs <span id="deepState"></span></label>
-  <button class="linkish" id="aiToggle">AI ranking…</button>
   <span id="count"></span>
 </div>
 
-<div class="panel" id="aiPanel" hidden>
-  <p class="panel-lead">
-    Keyword search finds candidates; a model decides which of them actually answer
-    the question. Your key is stored in this browser only and requests go straight
-    from here to the provider — there is no server in between. Use a key with a
-    spend limit, and not on a shared computer.
-  </p>
-  <div class="panel-grid">
-    <label>Provider
-      <select id="aiProvider">
-        <option value="deepseek">DeepSeek</option>
-        <option value="openai">OpenAI</option>
-        <option value="openrouter">OpenRouter</option>
-        <option value="anthropic">Anthropic</option>
-        <option value="gemini">Google Gemini</option>
-        <option value="custom">Other (OpenAI-compatible)</option>
-      </select>
-    </label>
-    <label>Model <input id="aiModel" type="text" autocomplete="off"></label>
-    <label class="wide" id="aiUrlWrap" hidden>API URL <input id="aiUrl" type="text" autocomplete="off"></label>
-    <label class="wide">API key <input id="aiKey" type="password" autocomplete="off" placeholder="stored in this browser"></label>
-  </div>
-  <div class="panel-actions">
-    <button class="btn" id="aiSave">Save</button>
-    <button class="btn ghost" id="aiClear">Forget key</button>
-    <span id="aiStatusText"></span>
+<div id="notes"></div>
+<div id="results"><div class="state">Loading…</div></div>
+
+<!-- Its own surface, because the search box and a question are different
+     inputs. Typing a sentence into a live keyword filter degrades the filter
+     while you write, so describing a need in full belongs somewhere that does
+     not fight it. -->
+<div class="modal" id="aiDialog" hidden>
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2>Describe what you need</h2>
+      <button class="btn-x" id="aiClose" aria-label="Close">×</button>
+    </div>
+
+    <textarea id="aiQuestion" rows="4"
+      placeholder="Write it however you like — in any language.&#10;&#10;e.g. I read on two devices and want my highlights and notes to end up in the same place, without paying for a service."></textarea>
+
+    <div class="modal-actions">
+      <button class="btn" id="aiAsk">Ask</button>
+      <button class="linkish" id="aiSettingsToggle">Provider settings</button>
+      <span id="aiStatusText"></span>
+    </div>
+
+    <div class="panel" id="aiPanel" hidden>
+      <p class="panel-lead">
+        Your key is stored in this browser only and requests go straight from here
+        to the provider — there is no server in between. Use a key with a spend
+        limit, and not on a shared computer.
+      </p>
+      <div class="panel-grid">
+        <label>Provider
+          <select id="aiProvider">
+            <option value="deepseek">DeepSeek</option>
+            <option value="openai">OpenAI</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="gemini">Google Gemini</option>
+            <option value="custom">Other (OpenAI-compatible)</option>
+          </select>
+        </label>
+        <label>Model <input id="aiModel" type="text" autocomplete="off"></label>
+        <label class="wide" id="aiUrlWrap" hidden>API URL <input id="aiUrl" type="text" autocomplete="off"></label>
+        <label class="wide">API key <input id="aiKey" type="password" autocomplete="off" placeholder="stored in this browser"></label>
+      </div>
+      <div class="panel-actions">
+        <button class="btn" id="aiSave">Save</button>
+        <button class="btn ghost" id="aiClear">Forget key</button>
+      </div>
+    </div>
+
+    <div id="aiOut"></div>
   </div>
 </div>
-
-<div id="notes"></div>
-<div id="aiOut" hidden></div>
-<div id="results"><div class="state">Loading…</div></div>
 
 <footer>
   Built nightly from the <code>koreader-plugin</code> GitHub topic ·
@@ -525,19 +583,31 @@ async function callModel(cfg, query, candidates) {
 }
 
 async function runAI() {
+  const question = $("aiQuestion").value.trim();
   const cfg = aiConfig();
-  if (!cfg || !cfg.key) { $("aiPanel").hidden = false; return; }
-  if (!state.query.trim()) return;
+  if (!cfg || !cfg.key) {
+    $("aiPanel").hidden = false;
+    $("aiStatusText").textContent = "Add a key first.";
+    return;
+  }
+  if (!question) { $("aiQuestion").focus(); return; }
 
-  const candidates = shortlistFor(state.query);
-  if (!candidates.length) return;
+  // Retrieval runs on the question, not on whatever is in the filter box. The
+  // two are independent inputs and writing a paragraph must not disturb the
+  // list behind the dialog.
+  const candidates = shortlistFor(question);
+  if (!candidates.length) {
+    $("aiOut").innerHTML = `<div class="note info"><b>Nothing to work with</b>
+      No entry matched any word of that. Try naming the task more plainly —
+      the shortlist is built by keyword before the model ever sees it.</div>`;
+    return;
+  }
 
-  $("aiOut").hidden = false;
   $("aiOut").innerHTML = `<div class="state">Asking the model about ${candidates.length} candidates…</div>`;
 
   let result;
   try {
-    result = await callModel(cfg, state.query, candidates);
+    result = await callModel(cfg, question, candidates);
   } catch (err) {
     // A browser-origin block is by far the likeliest failure and says nothing
     // useful on its own, so name it rather than showing a bare "Failed to fetch".
@@ -558,12 +628,13 @@ async function runAI() {
     return;
   }
 
+  const tokens = tokenise(question);
   $("aiOut").innerHTML =
-    `<div class="section-title">Model's picks</div>` +
+    `<div class="section-title">${picks.length} of ${candidates.length} candidates fit</div>` +
     (result.note ? `<div class="note info"><b>Note</b>${esc(result.note)}</div>` : "") +
     picks.map(p => {
       const entry = byId.get(p.id);
-      return `<div class="ai-result">${card(entry, tokenise(state.query))
+      return `<div class="ai-result">${card(entry, tokens)
         .replace("</article>", `<p class="ai-why">${esc(p.why || "")}</p></article>`)}</div>`;
     }).join("");
   bindReadme($("aiOut"), picks.map(p => byId.get(p.id)));
@@ -683,7 +754,7 @@ function render() {
 
   $("notes").innerHTML = warning + hint + (list.length ? noteFor(list, tokens) : "");
   if ($("hintOpen")) {
-    $("hintOpen").addEventListener("click", () => { $("aiPanel").hidden = false; });
+    $("hintOpen").addEventListener("click", () => $("askAi").click());
   }
 
   if (!list.length) {
@@ -834,7 +905,6 @@ async function boot() {
     $("clear").hidden = !state.query;
     // Last answer belongs to the previous question; leaving it on screen while
     // the results underneath change is worse than showing nothing.
-    $("aiOut").hidden = true;
     clearTimeout(timer);
     timer = setTimeout(render, 120);
   });
@@ -892,10 +962,34 @@ function setupAI() {
   fill();
 
   const say = text => { $("aiStatusText").textContent = text; };
-  if (cfg.key) say(`Ready — ${cfg.provider}`);
+  if (cfg.key) say(`Using ${cfg.provider}`);
+
+  const openDialog = () => {
+    $("aiDialog").hidden = false;
+    // Whatever is in the filter box is a reasonable starting point, but only
+    // as a seed -- from here on the two inputs are independent.
+    if (!$("aiQuestion").value && state.query.trim()) $("aiQuestion").value = state.query.trim();
+    if (!aiConfig()) $("aiPanel").hidden = false;
+    $("aiQuestion").focus();
+  };
+  const closeDialog = () => { $("aiDialog").hidden = true; };
+
+  $("askAi").addEventListener("click", openDialog);
+  $("aiClose").addEventListener("click", closeDialog);
+  $("aiDialog").addEventListener("click", e => { if (e.target === $("aiDialog")) closeDialog(); });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && !$("aiDialog").hidden) closeDialog();
+  });
+
+  $("aiAsk").addEventListener("click", runAI);
+  // Ctrl/Cmd+Enter submits; plain Enter stays a newline, because the whole
+  // point of this box is room to write more than a line.
+  $("aiQuestion").addEventListener("keydown", e => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); runAI(); }
+  });
 
   $("aiProvider").addEventListener("change", fill);
-  $("aiToggle").addEventListener("click", () => { $("aiPanel").hidden = !$("aiPanel").hidden; });
+  $("aiSettingsToggle").addEventListener("click", () => { $("aiPanel").hidden = !$("aiPanel").hidden; });
   $("aiSave").addEventListener("click", () => {
     const next = {
       provider: $("aiProvider").value,
@@ -905,21 +999,15 @@ function setupAI() {
     };
     if (!next.key) { say("A key is needed."); return; }
     localStorage.setItem("kpi.ai", JSON.stringify(next));
-    say(`Saved — ${next.provider}. Press Enter in the search box to rank with it.`);
+    say(`Using ${next.provider}`);
     $("aiPanel").hidden = true;
-    if (state.query.trim()) runAI();
+    if ($("aiQuestion").value.trim()) runAI();
   });
   $("aiClear").addEventListener("click", () => {
     localStorage.removeItem("kpi.ai");
     $("aiKey").value = "";
-    $("aiOut").hidden = true;
+    $("aiOut").innerHTML = "";
     say("Key forgotten.");
-  });
-
-  // Enter runs the model. Typing must never trigger it -- a request per
-  // keystroke would spend the user's money on half-written questions.
-  $("q").addEventListener("keydown", event => {
-    if (event.key === "Enter") { event.preventDefault(); runAI(); }
   });
 }
 
