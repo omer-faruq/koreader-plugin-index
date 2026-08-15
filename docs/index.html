@@ -1123,6 +1123,18 @@ async function boot() {
   renderFreshness();
   renderChips();
 
+  // Keeps the address bar honest about which mode and tab you are in, so the
+  // page can be reloaded, bookmarked or sent to someone and come back the same.
+  // replaceState rather than pushState: switching modes is not a navigation and
+  // should not put a stop on the back button between here and the page before.
+  function syncUrl() {
+    const params = new URLSearchParams();
+    if (!$("aiView").hidden) params.set("ai", "1");
+    if (state.tab === "patches") params.set("tab", "patches");
+    const query = params.toString();
+    history.replaceState(null, "", query ? `?${query}` : location.pathname);
+  }
+
   // Extracted so a link can land on a tab as well as a click. The AppStore page
   // sends people here with ?tab=patches when that is what they were browsing.
   async function switchTab(name) {
@@ -1155,18 +1167,12 @@ async function boot() {
     }
     renderChips();
     render();
+    syncUrl();
   }
 
   $("tabs").querySelectorAll(".tab").forEach(button => {
     button.addEventListener("click", () => switchTab(button.dataset.tab));
   });
-
-  const params = new URLSearchParams(location.search);
-  if (params.has("q")) { state.query = params.get("q"); $("q").value = state.query; }
-  if (params.get("tab") === "patches") await switchTab("patches");
-  // ?ai=1 lands straight in AI Mode, so the AppStore page can hand someone
-  // over already in the mode they clicked for.
-  if (params.get("ai") === "1") $("askAi").click();
 
   let timer;
   $("q").addEventListener("input", e => {
@@ -1221,6 +1227,15 @@ async function boot() {
 
   setupAI();
   setupInstallModal();
+
+  // After setupAI, not before it. ?ai=1 works by clicking the pill, and the
+  // pill's listener is registered in setupAI -- run earlier, the click landed
+  // on nothing and the page opened in browse mode with no sign of why.
+  const params = new URLSearchParams(location.search);
+  if (params.has("q")) { state.query = params.get("q"); $("q").value = state.query; }
+  if (params.get("tab") === "patches") await switchTab("patches");
+  if (params.get("ai") === "1") $("askAi").click();
+
   $("clear").hidden = !state.query;
   render();
 }
@@ -1287,8 +1302,13 @@ function setupAI() {
     if (!$("aiQuestion").value && state.query.trim()) $("aiQuestion").value = state.query.trim();
     if (!aiConfig()) $("aiPanel").hidden = false;
     $("aiQuestion").focus();
+    syncUrl();
   };
-  const closeDialog = () => { $("aiView").hidden = true; $("browseView").hidden = false; };
+  const closeDialog = () => {
+    $("aiView").hidden = true;
+    $("browseView").hidden = false;
+    syncUrl();
+  };
 
   $("askAi").addEventListener("click", openDialog);
   $("aiClose").addEventListener("click", closeDialog);
