@@ -527,7 +527,11 @@ const EXPAND_PROMPT = [
   "Reply with the English search terms someone would use to find what they need,",
   "including obvious synonyms: 'annotations' alongside 'highlights', 'opds' alongside 'catalog'.",
   "Six to twelve terms, single words or short phrases, no explanation.",
-  'JSON only: {"terms":["..."],"category":"one of the given ids, or null"}'
+  // No category is asked for. Category names are already among the fields the
+  // local scorer matches, so a term like "sync" reaches the category anyway,
+  // and a hard category choice here would risk excluding the right answer the
+  // way the taxonomy's own 20% miscellaneous rate suggests it would.
+  'JSON only: {"terms":["..."]}'
 ].join(" ");
 
 const SYSTEM_PROMPT = [
@@ -639,10 +643,8 @@ async function callModel(cfg, system, user) {
 }
 
 async function expandQuery(cfg, question) {
-  const ids = (state.index.categories || []).map(c => c.id);
   try {
-    const out = await callModel(cfg, EXPAND_PROMPT,
-      JSON.stringify({ question, categories: ids }));
+    const out = await callModel(cfg, EXPAND_PROMPT, JSON.stringify({ question }));
     const terms = (out.terms || []).filter(t => typeof t === "string");
     return terms.length ? terms : null;
   } catch {
