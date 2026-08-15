@@ -33,9 +33,13 @@ PUBLISHED_INDEX = "https://omer-faruq.github.io/koreader-plugin-index/index.json
 
 # The same discovery surface the AppStore plugin uses, so the index cannot
 # drift away from what the plugin itself would find.
+# Copied verbatim from the AppStore page's QUERIES.plugins, so the index cannot
+# drift away from what the plugin itself finds. The quoting matters: `in:name
+# ".koplugin"` and `koplugin in:name` are different searches, and the loose form
+# returned 86 fewer repositories than the AppStore reports.
 PLUGIN_QUERIES = [
     "topic:koreader-plugin",
-    "koplugin in:name",
+    'in:name ".koplugin"',
 ]
 
 

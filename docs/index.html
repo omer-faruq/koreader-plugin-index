@@ -198,7 +198,11 @@ const APPSTORE = "https://omer-faruq.github.io/appstore.koplugin/";
    without the same change there means the tests stop describing what users
    actually see. */
 
-const WEIGHT = { name: 4, keyword: 3, purpose: 2, description: 2, category: 2 };
+// The repository name is deliberately the weakest signal. It was the strongest
+// at first, and on real data that produced the failure the knowledge base warns
+// about: three plugins with "manga" in the name outranked the actual manga
+// reader, whose name says nothing about manga.
+const WEIGHT = { keyword: 3.5, purpose: 3, description: 2.5, category: 2, name: 1.5 };
 const TIER_BONUS = { A: 3, B: 1, C: -2.5 };
 const MIN_PREFIX = 4;
 const MIN_INDEX_PREFIX = 3;
@@ -209,8 +213,32 @@ const STOPWORDS = new Set([
   "plugins","please","need","looking","some",
   // Everything here is about reading on an e-reader, so these carry no signal
   // and actively mislead: "read" pulls in Readeck and every README that says it.
-  "read","reads","reading","reader","ereader","book","books"
+  "read","reads","reading","reader","ereader","book","books",
+  // Padding words. "AI help" was matching an eye-rest reminder on "help" alone.
+  "help","best","good","better","something","anything","any","while"
 ]);
+
+// Stripped to a common stem, longest first, so "translate" reaches a plugin
+// whose keyword is "translation".
+const SUFFIXES = ["ings","ions","ies","ing","ion","ers","es","ed","er","ly","s","e"];
+const MIN_STEM = 4;
+
+function stem(word) {
+  // Applied to a fixed point: one pass leaves "wirelessly" at "wireless" while
+  // "wireless" reduces further, and both spellings must land on the same stem.
+  for (let i = 0; i < 3; i++) {
+    let cut = false;
+    for (const suffix of SUFFIXES) {
+      if (word.endsWith(suffix) && word.length - suffix.length >= MIN_STEM) {
+        word = word.slice(0, -suffix.length);
+        cut = true;
+        break;
+      }
+    }
+    if (!cut) break;
+  }
+  return word;
+}
 
 const words = s => (s || "").toLowerCase().match(/[a-z0-9]+/g) || [];
 
@@ -221,9 +249,10 @@ function tokenise(text) {
 function hits(tokens, haystack) {
   if (!haystack) return 0;
   const pool = new Set(words(haystack));
+  const stems = new Set([...pool].map(stem));
   let n = 0;
   for (const t of tokens) {
-    if (pool.has(t)) { n++; continue; }
+    if (pool.has(t) || stems.has(stem(t))) { n++; continue; }
     if (t.length < MIN_PREFIX) continue;
     for (const w of pool) {
       if (w.startsWith(t) || (w.length >= MIN_INDEX_PREFIX && t.startsWith(w))) { n++; break; }

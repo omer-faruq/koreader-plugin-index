@@ -26,11 +26,17 @@ MIN_PREFIX = 4
 # be a real term than a fragment.
 MIN_INDEX_PREFIX = 3
 
-WEIGHT_NAME = 4.0
-WEIGHT_KEYWORD = 3.0
-WEIGHT_PURPOSE = 2.0
-WEIGHT_DESCRIPTION = 2.0
+# The repository name is deliberately the *weakest* signal. It was the
+# strongest in the first version, and on real data that produced exactly the
+# failure the original knowledge base warns about in rule 6: do not assume a
+# plugin does something merely because its name suggests it. Searching for
+# manga surfaced three plugins with "manga" in the name over the actual manga
+# reader, whose name says nothing about manga.
+WEIGHT_KEYWORD = 3.5
+WEIGHT_PURPOSE = 3.0
+WEIGHT_DESCRIPTION = 2.5
 WEIGHT_CATEGORY = 2.0
+WEIGHT_NAME = 1.5
 
 # Tier is a ranking signal, not just a badge. Curated entries should surface
 # above automatically-clean ones, and the long tail of forks, stubs and dormant
@@ -45,7 +51,33 @@ QUERY_STOPWORDS = {
     # carry no signal and actively mislead: "read" pulls in Readeck, reading
     # lists and every README that says "read".
     "read", "reads", "reading", "reader", "ereader", "book", "books",
+    # Words people pad a request with. "AI help" was matching a plugin that
+    # reminds you to rest your eyes, on the strength of "help" alone.
+    "help", "best", "good", "better", "something", "anything", "any", "while",
 }
+
+# Suffixes stripped to a common stem, longest first. Without this "translate"
+# never reaches a plugin whose keyword is "translation", which is how the
+# assistant plugin lost its own translation query on real data.
+SUFFIXES = ("ings", "ions", "ies", "ing", "ion", "ers", "es", "ed", "er", "ly", "s", "e")
+MIN_STEM = 4
+
+
+def stem(word):
+    """Strip suffixes to a fixed point.
+
+    Applied repeatedly rather than once, because a single pass leaves
+    "wirelessly" at "wireless" while "wireless" itself reduces further -- and
+    two spellings of one word must land on the same stem or the match is lost.
+    """
+    for _ in range(3):
+        for suffix in SUFFIXES:
+            if word.endswith(suffix) and len(word) - len(suffix) >= MIN_STEM:
+                word = word[: -len(suffix)]
+                break
+        else:
+            break
+    return word
 
 
 def tokenise(text):
@@ -66,9 +98,10 @@ def _hits(tokens, haystack):
     if not haystack:
         return 0
     words = set(WORD_RE.findall(haystack.lower()))
+    stems = {stem(w) for w in words}
     count = 0
     for token in tokens:
-        if token in words:
+        if token in words or stem(token) in stems:
             count += 1
         elif len(token) >= MIN_PREFIX and any(
             word.startswith(token)
