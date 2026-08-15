@@ -49,6 +49,12 @@ def extract_purpose(readme, limit=220):
             continue
         if line.startswith(("|", ">", "---", "===", "* ", "- ", "1. ")):
             continue
+        # Language switcher rows -- "English | 中文 | Español" -- sit above the
+        # real first paragraph in bilingual READMEs and are not prose. Taking
+        # one as a plugin's purpose is worse than having none, because a model
+        # reading it will try to describe the plugin from it.
+        if "|" in line and all(len(part.strip()) < 20 for part in line.split("|")):
+            continue
         paragraph.append(line)
         if sum(len(p) for p in paragraph) > limit:
             break
@@ -56,6 +62,10 @@ def extract_purpose(readme, limit=220):
         return ""
     text = " ".join(paragraph)
     text = re.sub(r"\s+", " ", text).strip()
+    # Too short to be a description of anything. An empty purpose is honest and
+    # the consumers all handle it; a three-word fragment invites invention.
+    if len(text) < 25:
+        return ""
     if len(text) > limit:
         cut = text[:limit].rsplit(" ", 1)[0]
         text = cut + "…"

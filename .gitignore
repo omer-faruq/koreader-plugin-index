@@ -12,3 +12,4 @@ __pycache__/
 js_out.json
 docs/readme-index.json
 docs/patches.json
+docs/llms.txt

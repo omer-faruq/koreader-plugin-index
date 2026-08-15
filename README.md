@@ -91,7 +91,8 @@ covers it.
 
 - [x] Schema, generator, tiers, categories, ranking, quality tests
 - [x] Search page (`docs/index.html`), with a parity check against `rank.py`
-- [ ] First live run against the GitHub API
-- [ ] Patches — the unit there is a file, not a repository
-- [ ] `knowledge-base.md` and `llms.txt` for LLM assistants
+- [x] First live run: 740 plugins, 449 patch files
+- [x] Patches — indexed as files, in their own tab
+- [x] `knowledge-base.md` and `llms.txt` for LLM assistants
+- [ ] Optional AI search in the page, with the user's own key
 - [ ] On-device search in the AppStore plugin

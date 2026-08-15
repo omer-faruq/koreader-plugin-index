@@ -21,6 +21,7 @@ import tomllib
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 
 import extract  # noqa: E402
+import knowledge_base  # noqa: E402
 from github import Client, fetch_url  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -32,6 +33,8 @@ SOURCE_REPO = "https://github.com/omer-faruq/koreader-plugin-index"
 PUBLISHED_INDEX = "https://omer-faruq.github.io/koreader-plugin-index/index.json"
 READMES_URL = "https://omer-faruq.github.io/koreader-plugin-index/readme-index.json"
 PATCHES_URL = "https://omer-faruq.github.io/koreader-plugin-index/patches.json"
+PAGES_BASE = "https://omer-faruq.github.io/koreader-plugin-index"
+APPSTORE_URL = "https://omer-faruq.github.io/appstore.koplugin/"
 
 # Discovery mirrors the AppStore page's QUERIES.plugins so the index cannot
 # drift from what the plugin itself finds. The quoting matters: `in:name
@@ -467,6 +470,16 @@ def main():
         "readmes": live,
     })
 
+    # The third consumer: a document for assistants, and a pointer file for
+    # crawlers. Both are generated, so neither can go stale the way the
+    # hand-written knowledge base did.
+    kb = knowledge_base.render(index, patches, curation["distinctions"], PAGES_BASE + "/")
+    (out_dir / "knowledge-base.md").write_text(kb, encoding="utf-8")
+    (out_dir / "llms.txt").write_text(
+        knowledge_base.render_llms_txt(index, patches, PAGES_BASE, SOURCE_REPO, APPSTORE_URL),
+        encoding="utf-8")
+    kb_size = len(kb.encode("utf-8"))
+
     for detail in details.values():
         owner, repo = detail["id"].split("/", 1)
         write_json(out_dir / "detail" / f"{owner}__{repo}.json", detail)
@@ -488,6 +501,7 @@ def main():
     print(f"  patches   {len(patches)} in {patch_repos} repos ({patch_size/1024:.0f} KB)")
     print(f"    tiers   " + "  ".join(f"{k}:{v}" for k, v in sorted(ptiers.items())))
     print(f"    no doc  {no_header}")
+    print(f"  knowledge-base.md ({kb_size/1024:.0f} KB)  llms.txt")
     print(f"  requests  {client.requests}  (rate limit left: {client.remaining})")
     return 0
 
