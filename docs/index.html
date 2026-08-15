@@ -161,6 +161,8 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
 }
 .icon-btn:hover { border-color: var(--accent); background: var(--accent-soft); }
 .sheet-foot { margin: 12px 0 0; font-size: .76rem; color: var(--muted); }
+.muted-note { display: inline-block; max-width: 46ch; margin-top: 10px;
+  font-size: .8rem; line-height: 1.5; }
 .actions .act svg { width: 15px; height: 15px; vertical-align: -2px; margin-right: 4px; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; }
@@ -976,6 +978,9 @@ function render() {
     $("results").innerHTML = `<div class="state">
       Nothing matched.${state.showC ? "" : " Try including dormant entries above,"}
       or browse the <a href="${APPSTORE}" target="_blank" rel="noopener">full catalogue</a>.
+      <br><span class="muted-note">This index is rebuilt nightly, so a plugin
+      published in the last day is not here yet — and unstarred forks are left
+      out of it entirely. The AppStore page queries GitHub live and has both.</span>
     </div>`;
     return;
   }
@@ -1117,46 +1122,50 @@ async function boot() {
   renderFreshness();
   renderChips();
 
-  $("tabs").querySelectorAll(".tab").forEach(button => {
-    button.addEventListener("click", async () => {
-      state.tab = button.dataset.tab;
-      state.category = null;
-      $("tabs").querySelectorAll(".tab").forEach(b =>
-        b.setAttribute("aria-pressed", String(b.dataset.tab === state.tab)));
-      // Deep search is keyed by plugin id, so it can never match a patch.
-      // Leaving the box on the patches tab made it look available and do
-      // nothing at all.
-      $("deepWrap").hidden = state.tab === "patches";
+  // Extracted so a link can land on a tab as well as a click. The AppStore page
+  // sends people here with ?tab=patches when that is what they were browsing.
+  async function switchTab(name) {
+    state.tab = name;
+    state.category = null;
+    $("tabs").querySelectorAll(".tab").forEach(b =>
+      b.setAttribute("aria-pressed", String(b.dataset.tab === state.tab)));
+    // Deep search is keyed by plugin id, so it can never match a patch.
+    $("deepWrap").hidden = state.tab === "patches";
 
-      // Patches ship separately and load on first use, so the common case --
-      // someone looking for a plugin -- never downloads them.
-      if (state.tab === "patches" && !state.index.patches.length) {
-        $("results").innerHTML = `<div class="state">Loading patches…</div>`;
-        try {
-          const url = state.index.patches_url || "patches.json";
-          const resp = await fetch(url, { cache: "no-cache" });
-          if (!resp.ok) throw new Error(resp.status);
-          const payload = await resp.json();
-          state.index.patches = payload.patches || [];
-          state.patchCategories = payload.categories || [];
-        } catch (err) {
-          $("results").innerHTML = `<div class="state">
-            Could not load patches (${esc(err.message)}).<br>
-            Browse them on the
-            <a href="${APPSTORE}?tab=patches" target="_blank" rel="noopener">AppStore page</a>.
-          </div>`;
-          return;
-        }
+    // Patches ship separately and load on first use, so the common case --
+    // someone looking for a plugin -- never downloads them.
+    if (state.tab === "patches" && !state.index.patches.length) {
+      $("results").innerHTML = `<div class="state">Loading patches…</div>`;
+      try {
+        const url = state.index.patches_url || "patches.json";
+        const resp = await fetch(url, { cache: "no-cache" });
+        if (!resp.ok) throw new Error(resp.status);
+        const payload = await resp.json();
+        state.index.patches = payload.patches || [];
+        state.patchCategories = payload.categories || [];
+      } catch (err) {
+        $("results").innerHTML = `<div class="state">
+          Could not load patches (${esc(err.message)}).<br>
+          Browse them on the
+          <a href="${APPSTORE}?tab=patches" target="_blank" rel="noopener">AppStore page</a>.
+        </div>`;
+        return;
       }
-      // After the load, so the patches tab draws its own counts rather than
-      // an empty strip on first switch.
-      renderChips();
-      render();
-    });
+    }
+    renderChips();
+    render();
+  }
+
+  $("tabs").querySelectorAll(".tab").forEach(button => {
+    button.addEventListener("click", () => switchTab(button.dataset.tab));
   });
 
   const params = new URLSearchParams(location.search);
   if (params.has("q")) { state.query = params.get("q"); $("q").value = state.query; }
+  if (params.get("tab") === "patches") await switchTab("patches");
+  // ?ai=1 lands straight in AI Mode, so the AppStore page can hand someone
+  // over already in the mode they clicked for.
+  if (params.get("ai") === "1") $("askAi").click();
 
   let timer;
   $("q").addEventListener("input", e => {
