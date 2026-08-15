@@ -519,14 +519,30 @@ const SYSTEM_PROMPT = [
   'Reply with JSON only: {"picks":[{"id":"owner/repo","why":"one short sentence"}],"note":"optional one sentence"}'
 ].join(" ");
 
+const SHORTLIST_FLOOR = 10;
+
 function shortlistFor(query) {
   const tokens = tokenise(query);
   const pool = state.index.plugins.filter(e => e.tier !== "C");
-  return pool.map(e => [score(e, tokens), e])
+  const matched = pool.map(e => [score(e, tokens), e])
     .filter(p => p[0] > 0)
     .sort((a, b) => b[0] - a[0])
     .slice(0, SHORTLIST)
     .map(p => p[1]);
+
+  if (matched.length >= SHORTLIST_FLOOR) return matched;
+
+  // Keyword retrieval is monolingual: the index is English, so a question
+  // written in another language scores zero everywhere and the model would
+  // never be asked at all. Rather than fail, top the shortlist up with the
+  // reviewed set and the most-used plugins -- the model reads the question in
+  // whatever language it was written and can recognise them from their
+  // purposes. A thin match gets the same treatment for the same reason.
+  const have = new Set(matched.map(e => e.id));
+  const filler = pool
+    .filter(e => !have.has(e.id))
+    .sort((a, b) => (TIER_BONUS[b.tier] - TIER_BONUS[a.tier]) || (b.stars - a.stars));
+  return matched.concat(filler.slice(0, SHORTLIST - matched.length));
 }
 
 function compact(entry) {
@@ -612,8 +628,7 @@ async function runAI() {
   const candidates = shortlistFor(question);
   if (!candidates.length) {
     $("aiOut").innerHTML = `<div class="note info"><b>Nothing to work with</b>
-      No entry matched any word of that. Try naming the task more plainly —
-      the shortlist is built by keyword before the model ever sees it.</div>`;
+      The catalogue came back empty. Reload the page and try again.</div>`;
     return;
   }
 
