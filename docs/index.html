@@ -517,6 +517,19 @@ const PROVIDERS = {
 // the weak link this layer exists to cover, so the net is worth widening.
 const SHORTLIST = 40;
 
+// Stage one. Retrieval is keyword matching against an English index, so a
+// question in another language scores zero everywhere and a wordy one scores
+// badly -- the shortlist was the weak point, not the ranking. Turning the
+// question into search terms first costs about twenty output tokens and makes
+// the shortlist good enough that stage two has something worth ranking.
+const EXPAND_PROMPT = [
+  "Read a question about KOReader plugins, in any language.",
+  "Reply with the English search terms someone would use to find what they need,",
+  "including obvious synonyms: 'annotations' alongside 'highlights', 'opds' alongside 'catalog'.",
+  "Six to twelve terms, single words or short phrases, no explanation.",
+  'JSON only: {"terms":["..."],"category":"one of the given ids, or null"}'
+].join(" ");
+
 const SYSTEM_PROMPT = [
   "You help people find KOReader plugins.",
   "You are given a question and a shortlist of candidates, each with its stated purpose.",
@@ -580,17 +593,10 @@ function aiConfig() {
   try { return JSON.parse(localStorage.getItem("kpi.ai") || "null"); } catch { return null; }
 }
 
-async function callModel(cfg, query, candidates) {
+async function callModel(cfg, system, user) {
   const preset = PROVIDERS[cfg.provider] || PROVIDERS.custom;
   const model = cfg.model || preset.model;
-  const relevant = (state.index.distinctions || []).filter(d =>
-    (d.between || []).filter(x => candidates.some(c => c.id === x)).length >= 2);
-
-  const user = JSON.stringify({
-    question: query,
-    candidates: candidates.map(compact),
-    known_confusions: relevant.map(d => ({ between: d.between, note: d.say }))
-  });
+  const SYSTEM_PROMPT = system;
 
   let url = cfg.url || preset.url;
   let headers = { "Content-Type": "application/json" };
@@ -632,6 +638,20 @@ async function callModel(cfg, query, candidates) {
   catch { throw new Error("the model did not return usable JSON"); }
 }
 
+async function expandQuery(cfg, question) {
+  const ids = (state.index.categories || []).map(c => c.id);
+  try {
+    const out = await callModel(cfg, EXPAND_PROMPT,
+      JSON.stringify({ question, categories: ids }));
+    const terms = (out.terms || []).filter(t => typeof t === "string");
+    return terms.length ? terms : null;
+  } catch {
+    // Stage one is an improvement, not a requirement. If it fails, retrieval
+    // falls back to the raw question exactly as before.
+    return null;
+  }
+}
+
 async function runAI() {
   const question = $("aiQuestion").value.trim();
   const cfg = aiConfig();
@@ -645,18 +665,29 @@ async function runAI() {
   // Retrieval runs on the question, not on whatever is in the filter box. The
   // two are independent inputs and writing a paragraph must not disturb the
   // list behind the dialog.
-  const candidates = shortlistFor(question);
+  $("aiOut").innerHTML = `<div class="state">Reading the question…</div>`;
+  const terms = await expandQuery(cfg, question);
+  const retrievalQuery = terms ? terms.join(" ") + " " + question : question;
+
+  const candidates = shortlistFor(retrievalQuery);
   if (!candidates.length) {
     $("aiOut").innerHTML = `<div class="note info"><b>Nothing to work with</b>
       The catalogue came back empty. Reload the page and try again.</div>`;
     return;
   }
 
-  $("aiOut").innerHTML = `<div class="state">Asking the model about ${candidates.length} candidates…</div>`;
+  $("aiOut").innerHTML = `<div class="state">Weighing ${candidates.length} candidates…</div>`;
+
+  const relevant = (state.index.distinctions || []).filter(d =>
+    (d.between || []).filter(x => candidates.some(c => c.id === x)).length >= 2);
 
   let result;
   try {
-    result = await callModel(cfg, question, candidates);
+    result = await callModel(cfg, SYSTEM_PROMPT, JSON.stringify({
+      question,
+      candidates: candidates.map(compact),
+      known_confusions: relevant.map(d => ({ between: d.between, note: d.say }))
+    }));
   } catch (err) {
     // A browser-origin block is by far the likeliest failure and says nothing
     // useful on its own, so name it rather than showing a bare "Failed to fetch".
@@ -677,9 +708,10 @@ async function runAI() {
     return;
   }
 
-  const tokens = tokenise(question);
+  const tokens = tokenise(retrievalQuery);
   $("aiOut").innerHTML =
-    `<div class="section-title">${picks.length} of ${candidates.length} candidates fit</div>` +
+    `<div class="section-title">${picks.length} of ${candidates.length} candidates fit${
+      terms ? ` · searched for ${esc(terms.slice(0, 6).join(", "))}` : ""}</div>` +
     (result.note ? `<div class="note info"><b>Note</b>${esc(result.note)}</div>` : "") +
     picks.map(p => {
       const entry = byId.get(p.id);
