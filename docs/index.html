@@ -220,11 +220,12 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
 .why span { color: var(--accent); }
 
 .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
-.actions a {
+.actions a, .actions .act {
   font-size: .84rem; text-decoration: none; color: var(--accent);
   border: 1px solid var(--border); border-radius: 7px; padding: 5px 11px;
+  background: transparent; cursor: pointer; font-family: inherit;
 }
-.actions a:hover { border-color: var(--accent); background: var(--accent-soft); }
+.actions a:hover, .actions .act:hover { border-color: var(--accent); background: var(--accent-soft); }
 
 /* The generator already publishes a README excerpt per plugin and nothing was
    reading it. Expanding inline answers "is this actually the one" without
@@ -776,8 +777,6 @@ function tierLabel(entry) {
 function card(entry, tokens) {
   const why = explain(entry, tokens);
   const patch = isPatch(entry);
-  const tab = patch ? "patches" : "plugins";
-  const handoff = `${APPSTORE}?tab=${tab}&owner=${encodeURIComponent(entry.owner)}&q=${encodeURIComponent(entry.repo)}`;
   const stars = patch ? entry.repo_stars : entry.stars;
   const title = patch ? entry.path : entry.repo;
   return `
@@ -798,7 +797,8 @@ function card(entry, tokens) {
       ${why.length ? `<span class="why">matched <span>${why.map(esc).join(", ")}</span></span>` : ""}
     </div>
     <div class="actions">
-      <a href="${esc(handoff)}" target="_blank" rel="noopener">Open in AppStore →</a>
+      <button class="act" data-copy="${esc(entry.owner)}/${esc(entry.repo)}"
+        title="Paste this into Install from URL in the AppStore plugin on your device">Copy ${esc(entry.owner)}/${esc(entry.repo)}</button>
       <a href="${esc(entry.url)}" target="_blank" rel="noopener">GitHub</a>
       ${patch ? `<a href="${esc(entry.raw_url)}" target="_blank" rel="noopener">Raw .lua</a>` : ""}
       ${entry.detail ? `<a href="#" data-readme="${esc(entry.id)}">README</a>` : ""}
@@ -890,6 +890,27 @@ function render() {
 }
 
 function bindReadme(root, entries) {
+  // What closes the loop is pasting owner/repo into Install from URL on the
+  // device. Linking to the AppStore's web page did not: it shows the same
+  // GitHub data this card already shows, and installs nothing.
+  root.querySelectorAll("[data-copy]").forEach(button => {
+    button.addEventListener("click", async () => {
+      const value = button.dataset.copy;
+      try { await navigator.clipboard.writeText(value); }
+      catch {
+        const scratch = document.createElement("textarea");
+        scratch.value = value;
+        document.body.appendChild(scratch);
+        scratch.select();
+        document.execCommand("copy");
+        scratch.remove();
+      }
+      const was = button.textContent;
+      button.textContent = "Copied — paste into Install from URL";
+      setTimeout(() => { button.textContent = was; }, 2200);
+    });
+  });
+
   const byId = new Map(entries.map(e => [e.id, e]));
   root.querySelectorAll("[data-readme]").forEach(link => {
     link.addEventListener("click", async event => {
