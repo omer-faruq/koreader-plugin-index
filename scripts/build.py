@@ -37,9 +37,14 @@ PUBLISHED_INDEX = "https://omer-faruq.github.io/koreader-plugin-index/index.json
 # drift away from what the plugin itself finds. The quoting matters: `in:name
 # ".koplugin"` and `koplugin in:name` are different searches, and the loose form
 # returned 86 fewer repositories than the AppStore reports.
+# `fork:true` is not optional here. GitHub's search excludes forks by default,
+# and in this ecosystem plugins routinely start as a fork of a template or of
+# another plugin -- assistant.koplugin (574 stars), rakuyomi (505) and
+# localsend.koplugin (255) are all forks, and all three were missing from the
+# index entirely until this was added.
 PLUGIN_QUERIES = [
-    "topic:koreader-plugin",
-    'in:name ".koplugin"',
+    "topic:koreader-plugin fork:true",
+    'in:name ".koplugin" fork:true',
 ]
 
 

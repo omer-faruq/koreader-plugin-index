@@ -203,6 +203,13 @@ def categorise(text_pool, topics):
 DORMANT_DAYS = 365
 STUB_README_BYTES = 300
 
+# Being a fork is not a quality signal in this ecosystem: plugins routinely
+# start as a fork of a template or of another plugin, and three of the most
+# popular ones in the catalogue are forks. What is noise is an *unloved* fork --
+# a copy nobody starred. That is the distinction the AppStore page already
+# draws with its "include zero-star forks" toggle.
+FORK_MIN_STARS = 1
+
 
 def _age_days(iso_timestamp, now=None):
     if not iso_timestamp:
@@ -229,12 +236,13 @@ def tier_of(entry, curated_tier=None):
     things but excluding them, and every signal used here is free.
     """
     reasons = []
+    unloved_fork = entry.get("is_fork") and entry.get("stars", 0) < FORK_MIN_STARS
 
     if entry.get("has_meta"):
         reasons.append("has_meta")
     else:
         reasons.append("no_meta")
-    if entry.get("is_fork"):
+    if unloved_fork:
         reasons.append("fork")
     if entry.get("archived"):
         reasons.append("archived")
@@ -249,7 +257,7 @@ def tier_of(entry, curated_tier=None):
 
     demoted = (
         not entry.get("has_meta")
-        or entry.get("is_fork")
+        or unloved_fork
         or entry.get("archived")
         or entry.get("activity") != "active"
         or entry.get("readme_bytes", 0) < STUB_README_BYTES

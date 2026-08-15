@@ -153,7 +153,14 @@ Every tier signal is deterministic and free. No model is involved.
 | --- | --- | --- |
 | `A` | Listed in `curation.yaml` — human-reviewed | yes |
 | `B` | `has_meta`, not a fork, not archived, active, README has substance | yes |
-| `C` | Everything else: dormant, fork, archived, or a stub | on request, badged |
+| `C` | Everything else: dormant, archived, a stub, or a fork nobody starred | on request, badged |
+
+Being a fork is **not** on its own a demotion. In this ecosystem plugins
+routinely begin as a fork of a template or of another plugin, and three of the
+most-starred entries in the catalogue are forks. Only an *unstarred* fork is
+treated as noise — the same line the AppStore page already draws with its
+"include zero-star forks" toggle. Note also that GitHub search omits forks
+unless the query says `fork:true`, so discovery must ask for them explicitly.
 
 `tier_reasons` is an array of the signals that produced the tier, so the page
 can render *why* something is demoted rather than silently hiding it:
