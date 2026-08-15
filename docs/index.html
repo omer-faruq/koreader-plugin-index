@@ -110,24 +110,18 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
   font-size: .88rem; font-weight: 600; cursor: pointer; white-space: nowrap;
 }
 #askAi:hover { border-color: var(--accent); background: var(--accent-soft); }
+#aiView .modal-card > #aiOut:not(:empty) { border-top: 0; padding-top: 0; }
 #askAi svg { width: 16px; height: 16px; fill: currentColor; }
 
-.modal {
-  position: fixed; inset: 0; z-index: 50; display: flex;
-  align-items: flex-start; justify-content: center;
-  padding: 6vh 16px 24px; background: rgba(0,0,0,.45);
-  overflow-y: auto;
-}
-.modal-card {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 14px; box-shadow: 0 12px 40px rgba(0,0,0,.25);
-  width: 100%; max-width: 680px; padding: 20px;
-}
-.modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.modal-head h2 { margin: 0; font-size: 1.1rem; }
+/* Full width, in the flow of the page. The results are a ranked list with
+   reasons and expandable READMEs, which needs the room. */
+.modal-card { width: 100%; padding: 4px 0 0; }
+.modal-head { display: flex; align-items: center; justify-content: space-between;
+  margin: 18px 0 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.modal-head h2 { margin: 0; font-size: 1.2rem; }
 .btn-x { border: 0; background: transparent; color: var(--muted); font-size: 1.5rem; cursor: pointer; line-height: 1; padding: 0 4px; }
 #aiQuestion {
-  width: 100%; padding: 12px 14px; font: inherit; font-size: .95rem;
+  width: 100%; padding: 14px 16px; font: inherit; font-size: .95rem;
   color: var(--text); background: var(--bg);
   border: 1px solid var(--border); border-radius: 10px; resize: vertical;
 }
@@ -275,6 +269,7 @@ footer a { color: var(--accent); }
   <div class="freshness" id="freshness">Loading index…</div>
 </header>
 
+<div id="browseView">
 <div class="tabs" id="tabs">
   <button class="tab" data-tab="plugins" aria-pressed="true">Plugins</button>
   <button class="tab" data-tab="patches" aria-pressed="false">Patches</button>
@@ -300,16 +295,17 @@ footer a { color: var(--accent); }
 
 <div id="notes"></div>
 <div id="results"><div class="state">Loading…</div></div>
+</div><!-- /browseView -->
 
-<!-- Its own surface, because the search box and a question are different
-     inputs. Typing a sentence into a live keyword filter degrades the filter
-     while you write, so describing a need in full belongs somewhere that does
-     not fight it. -->
-<div class="modal" id="aiDialog" hidden>
+<!-- A mode, not a dialog. The search box and a question are different inputs
+     -- typing a sentence into a live keyword filter degrades the filter while
+     you write -- and the answer is a ranked list with reasons and expandable
+     READMEs, which wants the width of the page rather than a box on top of it. -->
+<div id="aiView" hidden>
   <div class="modal-card">
     <div class="modal-head">
       <h2>Describe what you need</h2>
-      <button class="btn-x" id="aiClose" aria-label="Close">×</button>
+      <button class="linkish" id="aiClose">← Back to browsing</button>
     </div>
 
     <textarea id="aiQuestion" rows="4"
@@ -1142,8 +1138,12 @@ function setupAI() {
     if (narrow) narrow.addEventListener("click", () => { state.aiUseFilter = true; renderScope(); });
   };
 
+  // Swapping views rather than stacking one over the other: in AI mode the
+  // keyword filter, the chips and the browse list are all inapplicable, and
+  // leaving them behind a scrim only invites clicking them.
   const openDialog = () => {
-    $("aiDialog").hidden = false;
+    $("browseView").hidden = true;
+    $("aiView").hidden = false;
     renderScope();
     // Whatever is in the filter box is a reasonable starting point, but only
     // as a seed -- from here on the two inputs are independent.
@@ -1151,13 +1151,12 @@ function setupAI() {
     if (!aiConfig()) $("aiPanel").hidden = false;
     $("aiQuestion").focus();
   };
-  const closeDialog = () => { $("aiDialog").hidden = true; };
+  const closeDialog = () => { $("aiView").hidden = true; $("browseView").hidden = false; };
 
   $("askAi").addEventListener("click", openDialog);
   $("aiClose").addEventListener("click", closeDialog);
-  $("aiDialog").addEventListener("click", e => { if (e.target === $("aiDialog")) closeDialog(); });
   document.addEventListener("keydown", e => {
-    if (e.key === "Escape" && !$("aiDialog").hidden) closeDialog();
+    if (e.key === "Escape" && !$("aiView").hidden) closeDialog();
   });
 
   $("aiAsk").addEventListener("click", runAI);
