@@ -564,6 +564,9 @@ const state = { index: null, tab: "plugins", query: "", category: null, showC: f
                 readmes: null, aiUseFilter: true };
 
 const isPatch = entry => Boolean(entry.path);
+// Set during boot. AI Mode needs to be able to move to the other catalogue
+// when nothing here fits, and switchTab lives in boot's scope.
+let switchTabRef = null;
 const cssId = id => id.replace(/[^a-zA-Z0-9]/g, "_");
 
 const $ = id => document.getElementById(id);
@@ -839,8 +842,32 @@ async function runAI() {
   const byId = new Map(candidates.map(e => [e.id, e]));
   const picks = (result.picks || []).filter(p => byId.has(p.id));
   if (!picks.length) {
-    $("aiOut").innerHTML = `<div class="note info"><b>Nothing in the shortlist fits</b>${
-      esc(result.note || "The model found no candidate that actually does this. The keyword results are below.")}</div>`;
+    // The one moment switching catalogues is the right suggestion. A permanent
+    // tab switcher in here would let a question written about plugins be
+    // answered with core patches, which are a different proposition entirely --
+    // this offers it once, having established that nothing else fits.
+    const other = state.tab === "patches" ? "plugins" : "patches";
+    const count = (other === "patches" ? state.index.patches : state.index.plugins).length
+      || (state.index.counts || {}).patches || 0;
+    $("aiOut").innerHTML =
+      `<div class="note info"><b>Nothing in the shortlist fits</b>${
+        esc(result.note || "The model found no candidate that actually does this.")}</div>` +
+      `<div class="note info"><b>Try the other catalogue?</b>
+        ${other === "patches"
+          ? `There are also user patches — smaller changes to KOReader's own behaviour,
+             which can break when it updates.`
+          : `There are also plugins, which add features without changing KOReader itself
+             and are the safer place to look first.`}
+        <button class="linkish" id="aiOtherTab">Ask the same question about ${other}</button></div>`;
+    $("aiOtherTab").addEventListener("click", async () => {
+      await switchTabRef(other);
+      $("aiHeading").textContent = other === "patches"
+        ? "Describe what you need — searching patches"
+        : "Describe what you need";
+      $("browseView").hidden = true;
+      $("aiView").hidden = false;
+      runAI();
+    });
     return;
   }
 
@@ -1169,6 +1196,8 @@ async function boot() {
     render();
     syncUrl();
   }
+
+  switchTabRef = switchTab;
 
   $("tabs").querySelectorAll(".tab").forEach(button => {
     button.addEventListener("click", () => switchTab(button.dataset.tab));
