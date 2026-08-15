@@ -435,7 +435,10 @@ def main():
             "patches": len(patches),
             "patch_repos": patch_repos,
         },
-        "categories": category_summary(plugins + patches),
+        # Plugins only. Counts are per tab, and a chip on the patches tab
+        # claiming 151 interface entries when it can show none of the
+        # plugin ones is worse than showing no count at all.
+        "categories": category_summary(plugins),
         "distinctions": curation["distinctions"],
         "plugins": plugins,
         # Patches live in their own file from schema 2 on. Inlining them took
@@ -450,6 +453,7 @@ def main():
         "schema": SCHEMA_VERSION,
         "generated_at": started,
         "counts": {"patches": len(patches), "patch_repos": patch_repos},
+        "categories": category_summary(patches),
         "patches": patches,
     })
 

@@ -157,6 +157,17 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
 }
 .actions a:hover { border-color: var(--accent); background: var(--accent-soft); }
 
+/* The generator already publishes a README excerpt per plugin and nothing was
+   reading it. Expanding inline answers "is this actually the one" without
+   sending the reader to GitHub and losing their result list. */
+.readme {
+  margin-top: 12px; padding: 12px 14px; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 8px;
+  font-size: .87rem; line-height: 1.5; color: var(--text);
+  max-height: 300px; overflow-y: auto; white-space: pre-wrap;
+}
+.readme .head { color: var(--muted); font-size: .78rem; margin-bottom: 6px; }
+
 .state { text-align: center; padding: 44px 20px; color: var(--muted); }
 .state a { color: var(--accent); }
 .section-title { font-size: .82rem; text-transform: uppercase; letter-spacing: .06em;
@@ -190,7 +201,7 @@ footer a { color: var(--accent); }
 
 <div class="toolbar">
   <label><input type="checkbox" id="showC"> Include dormant, forks and stubs</label>
-  <label><input type="checkbox" id="deepSearch"> Search inside READMEs <span id="deepState"></span></label>
+  <label id="deepWrap"><input type="checkbox" id="deepSearch"> Search inside READMEs <span id="deepState"></span></label>
   <span id="count"></span>
 </div>
 
@@ -337,6 +348,7 @@ function explain(entry, tokens) {
 const state = { index: null, tab: "plugins", query: "", category: null, showC: false, readmes: null };
 
 const isPatch = entry => Boolean(entry.path);
+const cssId = id => id.replace(/[^a-zA-Z0-9]/g, "_");
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
@@ -386,7 +398,9 @@ function card(entry, tokens) {
       <a href="${esc(handoff)}" target="_blank" rel="noopener">Open in AppStore →</a>
       <a href="${esc(entry.url)}" target="_blank" rel="noopener">GitHub</a>
       ${patch ? `<a href="${esc(entry.raw_url)}" target="_blank" rel="noopener">Raw .lua</a>` : ""}
+      ${entry.detail ? `<a href="#" data-readme="${esc(entry.id)}">README</a>` : ""}
     </div>
+    <div class="readme" id="rm-${esc(cssId(entry.id))}" hidden></div>
   </article>`;
 }
 
@@ -451,10 +465,42 @@ function render() {
   $("results").innerHTML =
     (tokens.length ? "" : `<div class="section-title">${esc(heading)}</div>`) +
     list.map(e => card(e, tokens)).join("");
+
+  const byId = new Map(list.map(e => [e.id, e]));
+  $("results").querySelectorAll("[data-readme]").forEach(link => {
+    link.addEventListener("click", async event => {
+      event.preventDefault();
+      const entry = byId.get(link.dataset.readme);
+      const panel = $(`rm-${cssId(entry.id)}`);
+      if (!panel.hidden) { panel.hidden = true; link.textContent = "README"; return; }
+
+      link.textContent = "Hide README";
+      panel.hidden = false;
+      if (panel.dataset.loaded) return;
+      panel.textContent = "Loading…";
+      try {
+        const resp = await fetch(entry.detail, { cache: "force-cache" });
+        if (!resp.ok) throw new Error(resp.status);
+        const detail = await resp.json();
+        const text = (detail.readme_excerpt || "").trim();
+        panel.innerHTML =
+          `<div class="head">README excerpt — see GitHub for the full document</div>` +
+          esc(text || "This repository's README had no readable prose.");
+        panel.dataset.loaded = "1";
+      } catch (err) {
+        panel.textContent = `Could not load the README (${err.message}).`;
+      }
+    });
+  });
 }
 
 function renderChips() {
-  $("chips").innerHTML = (state.index.categories || [])
+  // Per tab. Patches carry their own counts, because a chip promising 151
+  // interface entries while the tab can show none of them is worse than none.
+  const source = state.tab === "patches"
+    ? (state.patchCategories || [])
+    : (state.index.categories || []);
+  $("chips").innerHTML = source
     .map(c => `<button class="chip" data-id="${esc(c.id)}" aria-pressed="false">${
       esc(c.label)}<span class="n">${c.count}</span></button>`).join("");
   $("chips").querySelectorAll(".chip").forEach(chip => {
@@ -511,7 +557,10 @@ async function boot() {
       state.category = null;
       $("tabs").querySelectorAll(".tab").forEach(b =>
         b.setAttribute("aria-pressed", String(b.dataset.tab === state.tab)));
-      $("chips").querySelectorAll(".chip").forEach(c => c.setAttribute("aria-pressed", "false"));
+      // Deep search is keyed by plugin id, so it can never match a patch.
+      // Leaving the box on the patches tab made it look available and do
+      // nothing at all.
+      $("deepWrap").hidden = state.tab === "patches";
 
       // Patches ship separately and load on first use, so the common case --
       // someone looking for a plugin -- never downloads them.
@@ -521,7 +570,9 @@ async function boot() {
           const url = state.index.patches_url || "patches.json";
           const resp = await fetch(url, { cache: "no-cache" });
           if (!resp.ok) throw new Error(resp.status);
-          state.index.patches = (await resp.json()).patches || [];
+          const payload = await resp.json();
+          state.index.patches = payload.patches || [];
+          state.patchCategories = payload.categories || [];
         } catch (err) {
           $("results").innerHTML = `<div class="state">
             Could not load patches (${esc(err.message)}).<br>
@@ -531,6 +582,9 @@ async function boot() {
           return;
         }
       }
+      // After the load, so the patches tab draws its own counts rather than
+      // an empty strip on first switch.
+      renderChips();
       render();
     });
   });
