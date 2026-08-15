@@ -7,6 +7,7 @@ an empty purpose is correct, an invented one is not.
 """
 
 import datetime
+import html
 import re
 
 # --------------------------------------------------------------------- markdown
@@ -26,14 +27,25 @@ def clean_markdown(text):
     text = IMAGE_RE.sub(" ", text)
     text = LINK_RE.sub(r"\1", text)
     text = HTML_RE.sub(" ", text)
+    # Entities survive tag stripping and then read as text. A language switcher
+    # written "English &nbsp;&nbsp;|&nbsp;&nbsp; 简体中文" slipped past the
+    # switcher filter for exactly this reason and became a plugin's stated
+    # purpose.
+    text = html.unescape(text)
     return text
 
 
-def extract_purpose(readme, limit=220):
-    """First paragraph that actually says something.
+def extract_purpose(readme, limit=320, enough=110):
+    """The opening prose, up to a useful length.
 
     READMEs open with badge rows, logos and title headings far more often than
     with prose, so the first non-empty line is usually the wrong answer.
+
+    Collection does not stop at the first paragraph either. Plenty of READMEs
+    open with a single short line -- "Manga reader for KOReader." -- and every
+    consumer of this field then has to tell that plugin apart from a dozen
+    others on those five words. Keep taking paragraphs until there is enough to
+    describe something.
     """
     if not readme:
         return ""
@@ -42,7 +54,7 @@ def extract_purpose(readme, limit=220):
     for raw in body.splitlines():
         line = raw.strip()
         if not line:
-            if paragraph:
+            if sum(len(p) for p in paragraph) >= enough:
                 break
             continue
         if line.startswith("#") or BADGE_RE.match(line):
