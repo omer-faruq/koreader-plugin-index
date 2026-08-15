@@ -54,6 +54,7 @@ QUERY_STOPWORDS = {
     # Words people pad a request with. "AI help" was matching a plugin that
     # reminds you to rest your eyes, on the strength of "help" alone.
     "help", "best", "good", "better", "something", "anything", "any", "while",
+    "without", "across", "between", "just", "also", "there",
 }
 
 # Suffixes stripped to a common stem, longest first. Without this "translate"
