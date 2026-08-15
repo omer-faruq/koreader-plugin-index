@@ -10,3 +10,4 @@ docs/detail/
 __pycache__/
 *.pyc
 js_out.json
+docs/readme-index.json

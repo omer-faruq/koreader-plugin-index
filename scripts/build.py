@@ -30,20 +30,15 @@ DETAIL = DOCS / "detail"
 SCHEMA_VERSION = 1
 SOURCE_REPO = "https://github.com/omer-faruq/koreader-plugin-index"
 PUBLISHED_INDEX = "https://omer-faruq.github.io/koreader-plugin-index/index.json"
+READMES_URL = "https://omer-faruq.github.io/koreader-plugin-index/readme-index.json"
 
-# The same discovery surface the AppStore plugin uses, so the index cannot
-# drift away from what the plugin itself would find.
-# Copied verbatim from the AppStore page's QUERIES.plugins, so the index cannot
-# drift away from what the plugin itself finds. The quoting matters: `in:name
-# ".koplugin"` and `koplugin in:name` are different searches, and the loose form
-# returned 86 fewer repositories than the AppStore reports.
-# `fork:true` is not optional here. GitHub's search excludes forks by default,
-# and in this ecosystem plugins routinely start as a fork of a template or of
-# another plugin -- assistant.koplugin (574 stars), rakuyomi (505) and
-# localsend.koplugin (255) are all forks, and all three were missing from the
-# index entirely until this was added.
-# Two passes per discovery surface, because GitHub cannot express "non-forks,
-# plus forks somebody starred" in a single query:
+# Discovery mirrors the AppStore page's QUERIES.plugins so the index cannot
+# drift from what the plugin itself finds. The quoting matters: `in:name
+# ".koplugin"` and `koplugin in:name` are different searches, and the loose
+# form returned 86 fewer repositories than the AppStore reports.
+#
+# Two passes per surface, because GitHub cannot express "non-forks, plus forks
+# somebody starred" in a single query:
 #
 #   bare query      -> non-forks only, which is GitHub's default
 #   fork:only ...   -> forks, restricted to those with at least one star
@@ -139,6 +134,11 @@ def build_plugin(node, curation):
     headings = extract.extract_headings(readme)
     description = node.get("description") or ""
 
+    # README body terms feed the lightweight index too, not just the deep
+    # search file: the sentence that says what a plugin does is usually well
+    # past the first paragraph.
+    body_terms = extract.readme_terms(readme)
+
     entry = {
         "id": node["nameWithOwner"],
         "owner": node["owner"]["login"],
@@ -146,8 +146,10 @@ def build_plugin(node, curation):
         "url": node["url"],
         "description": description,
         "purpose": extract.extract_purpose(readme),
-        "categories": extract.categorise(" ".join([description] + headings), topics),
-        "keywords": extract.keywords(description, topics, headings),
+        "categories": extract.categorise(
+            " ".join([description] + headings + body_terms), topics, node["name"]
+        ),
+        "keywords": extract.keywords(description, topics, headings, extra=body_terms),
         "topics": topics,
         "stars": node["stargazerCount"],
         "forks": node["forkCount"],
@@ -174,7 +176,7 @@ def build_plugin(node, curation):
             "readme_excerpt": extract.clean_markdown(readme)[:4000],
         }
         entry["detail"] = f"detail/{entry['owner']}__{entry['repo']}.json"
-    return entry, detail
+    return entry, detail, extract.condense_readme(readme)
 
 
 def collect_plugins(client, since=None):
@@ -260,7 +262,13 @@ def main():
     nodes = collect_plugins(client, since)
     print(f"  {len(nodes)} repositories returned")
 
-    entries, details = {}, {}
+    entries, details, readmes = {}, {}, {}
+
+    # Deep search reuses whatever the previous run condensed, so a diff run
+    # does not lose README text for the repositories it did not touch.
+    if args.mode == "diff":
+        previous_readmes = fetch_url(READMES_URL) or {}
+        readmes.update(previous_readmes.get("readmes", {}))
 
     # Carry forward everything the diff did not touch. Untouched entries keep
     # their previously extracted fields; only curation is re-applied, so a
@@ -275,10 +283,12 @@ def main():
             entries[old["id"]] = old
 
     for node in nodes.values():
-        entry, detail = build_plugin(node, curation)
+        entry, detail, condensed = build_plugin(node, curation)
         entries[entry["id"]] = entry
         if detail:
             details[entry["id"]] = detail
+        if condensed:
+            readmes[entry["id"]] = condensed
 
     plugins = sorted(entries.values(), key=lambda e: (-e["stars"], e["id"].lower()))
 
@@ -306,6 +316,17 @@ def main():
     }
 
     size = write_json(out_dir / "index.json", index)
+
+    # Kept out of index.json deliberately. Inlining 740 condensed READMEs would
+    # multiply the file the device downloads on every refresh, for a search
+    # mode most users never turn on. The page fetches this only when asked.
+    live = {pid: text for pid, text in readmes.items() if pid in entries}
+    readme_size = write_json(out_dir / "readme-index.json", {
+        "schema": SCHEMA_VERSION,
+        "generated_at": started,
+        "readmes": live,
+    })
+
     for detail in details.values():
         owner, repo = detail["id"].split("/", 1)
         write_json(out_dir / "detail" / f"{owner}__{repo}.json", detail)

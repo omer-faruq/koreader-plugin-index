@@ -38,6 +38,12 @@ WEIGHT_DESCRIPTION = 2.5
 WEIGHT_CATEGORY = 2.0
 WEIGHT_NAME = 1.5
 
+# Opt-in deep search. README bodies are noisy -- install instructions, licence
+# boilerplate, credits, long lists of unrelated tools -- so a match there is
+# the weakest evidence there is. It should surface something when nothing else
+# matched, never outrank a plugin whose own keywords answer the question.
+WEIGHT_README = 1.0
+
 # Tier is a ranking signal, not just a badge. Curated entries should surface
 # above automatically-clean ones, and the long tail of forks, stubs and dormant
 # repositories should stay out of the way unless it is all there is.
@@ -133,13 +139,18 @@ def _hits(tokens, haystack):
 
 
 def fields_of(entry):
-    return [
+    fields = [
         (WEIGHT_KEYWORD, " ".join(entry.get("keywords", []))),
         (WEIGHT_PURPOSE, entry.get("purpose", "")),
         (WEIGHT_DESCRIPTION, entry.get("description", "")),
         (WEIGHT_CATEGORY, " ".join(entry.get("categories", []))),
         (WEIGHT_NAME, entry.get("repo", "")),
     ]
+    # Present only when the caller has loaded readme-index.json and attached
+    # it. Deep search is opt-in, so index.json never carries this.
+    if entry.get("readme"):
+        fields.append((WEIGHT_README, entry["readme"]))
+    return fields
 
 
 def score(entry, tokens):

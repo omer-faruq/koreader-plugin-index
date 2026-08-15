@@ -173,6 +173,7 @@ footer a { color: var(--accent); }
 
 <div class="toolbar">
   <label><input type="checkbox" id="showC"> Include dormant, forks and stubs</label>
+  <label><input type="checkbox" id="deepSearch"> Search inside READMEs <span id="deepState"></span></label>
   <span id="count"></span>
 </div>
 
@@ -202,7 +203,11 @@ const APPSTORE = "https://omer-faruq.github.io/appstore.koplugin/";
 // at first, and on real data that produced the failure the knowledge base warns
 // about: three plugins with "manga" in the name outranked the actual manga
 // reader, whose name says nothing about manga.
-const WEIGHT = { keyword: 3.5, purpose: 3, description: 2.5, category: 2, name: 1.5 };
+// README bodies are noisy -- install steps, licence boilerplate, credits -- so
+// a match there is the weakest evidence available. It surfaces something when
+// nothing else matched; it never outranks a plugin whose keywords answer the
+// question directly.
+const WEIGHT = { keyword: 3.5, purpose: 3, description: 2.5, category: 2, name: 1.5, readme: 1 };
 const TIER_BONUS = { A: 3, B: 1, C: -2.5 };
 const POPULARITY_WEIGHT = 1.5;
 const MIN_PREFIX = 4;
@@ -263,13 +268,17 @@ function matches(token, pool) {
 }
 
 function fieldsOf(entry) {
-  return [
+  const fields = [
     [WEIGHT.keyword, (entry.keywords || []).join(" ")],
     [WEIGHT.purpose, entry.purpose],
     [WEIGHT.description, entry.description],
     [WEIGHT.category, (entry.categories || []).join(" ")],
     [WEIGHT.name, entry.repo]
   ];
+  // Attached onto the entry when deep search loads, so this mirrors rank.py
+  // exactly and stays free of any page state.
+  if (entry.readme) fields.push([WEIGHT.readme, entry.readme]);
+  return fields;
 }
 
 // Each query token counts once, scored by the strongest field it matched.
@@ -306,7 +315,9 @@ function explain(entry, tokens) {
 
 /* ------------------------------------------------------------------- state */
 
-const state = { index: null, query: "", category: null, showC: false };
+// `readmes` stays null until the deep-search box is ticked. It is roughly a
+// megabyte, and most searches are answered without it.
+const state = { index: null, query: "", category: null, showC: false, readmes: null };
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
@@ -467,6 +478,33 @@ async function boot() {
     state.query = ""; $("q").value = ""; $("clear").hidden = true; $("q").focus(); render();
   });
   $("showC").addEventListener("change", e => { state.showC = e.target.checked; render(); });
+
+  $("deepSearch").addEventListener("change", async e => {
+    const attach = on => {
+      for (const entry of state.index.plugins) {
+        if (on && state.readmes) entry.readme = state.readmes[entry.id] || "";
+        else delete entry.readme;
+      }
+    };
+
+    if (!e.target.checked) { attach(false); $("deepState").textContent = ""; render(); return; }
+    if (state.readmes) { attach(true); render(); return; }
+
+    $("deepState").textContent = "(loading…)";
+    try {
+      const resp = await fetch("readme-index.json", { cache: "force-cache" });
+      if (!resp.ok) throw new Error(resp.status);
+      state.readmes = (await resp.json()).readmes || {};
+      attach(true);
+      $("deepState").textContent = `(${Object.keys(state.readmes).length} READMEs)`;
+    } catch (err) {
+      // Deep search is an enhancement; losing it must not break the page.
+      state.readmes = null;
+      e.target.checked = false;
+      $("deepState").textContent = "(unavailable)";
+    }
+    render();
+  });
 
   $("clear").hidden = !state.query;
   render();

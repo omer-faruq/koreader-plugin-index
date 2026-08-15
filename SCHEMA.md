@@ -18,6 +18,7 @@ scripts/build.py  ──►  index.json  ──►  docs/index.html      (search
 | --- | --- | --- |
 | `docs/index.json` | search page | Full entries, no long prose. Target < 500 KB. |
 | `docs/detail/<owner>__<repo>.json` | search page, on demand | README-derived long text. |
+| `docs/readme-index.json` | search page, opt-in | Condensed README text per plugin, for deep search. ~1 MB, lazily loaded. |
 | `docs/index.min.json` | device (Lua) | Reserved for phase 6. Same entry shape, fewer fields. |
 | `docs/knowledge-base.md` | LLM | Generated prose, not consumed by code. |
 | `docs/llms.txt` | crawlers | Pointer file. |
@@ -193,7 +194,17 @@ usable alternative to typing a sentence.
 | `files` | Files & transfer | Wireless transfer, file management, backup |
 | `reading` | Reading experience | Statistics, progress, typography, layout |
 | `content` | External content | Manga, web novels, remote libraries |
+| `notes` | Notes & annotation | Note-taking, handwriting, annotation viewers |
+| `games` | Games & puzzles | Sudoku, solitaire, word puzzles |
 | `misc` | Other | Nothing above fits |
+
+`device` is matched against the repository name and topics only, never the
+description. "Works on Kobo and Kindle" appears in a quarter of all
+descriptions, which made it the largest bucket in the catalogue and the chip
+useless; in a name or a topic a device is a claim of identity instead.
+
+Widening this vocabulary against the published index took `misc` from 33% of
+the catalogue to 19%.
 
 Assignment is rule-based: `curation.yaml` first, then topic and keyword
 matching. An entry may hold more than one category; `misc` is only used when
