@@ -115,6 +115,95 @@ tier = "A"
 categories = ["device", "ui"]
 purpose = "Stylus support for handwritten notes in EPUBs, on the Kobo Libra Color specifically. Requires that hardware; it does nothing on devices without a pen."
 
+
+# --- added after measuring the catalogue: 43 same-name clusters among 574
+# --- recommendable plugins, and only 3% of them reviewed.
+
+[plugins."doctorhetfield-cmd/simpleui.koplugin"]
+tier = "A"
+categories = ["ui"]
+purpose = "Replaces KOReader's home screen with a dedicated one, plus a bottom navigation bar, a top status bar and a reworked library title. The most-used plugin in the catalogue."
+keywords = ["simpleui", "home screen", "homescreen", "navigation bar", "status bar"]
+
+[plugins."AndyHazz/bookshelf.koplugin"]
+tier = "A"
+categories = ["ui", "library"]
+purpose = "A home screen that browses your library by series, author, genre or collection, showing each book's cover, blurb, rating and progress before you open it."
+keywords = ["home screen", "library", "series", "author", "genre", "covers", "blurb"]
+
+[plugins."ZlibraryKO/zlibrary.koplugin"]
+tier = "A"
+categories = ["content", "library"]
+purpose = "Z-Library client for KOReader: search the service and download books to the device."
+note = "Describes the repository's stated functionality only. Availability and legality vary by jurisdiction; do not advise on either."
+
+[plugins."omer-faruq/appstore.koplugin"]
+tier = "A"
+categories = ["files"]
+purpose = "Discover, install and update community plugins and user patches from the device itself, without a computer. Tracks what you have installed and what has a newer version."
+keywords = ["install", "update", "plugin manager", "patches"]
+
+[plugins."Billiam/hardcoverapp.koplugin"]
+tier = "A"
+categories = ["reading", "library"]
+purpose = "Updates your reading status on Hardcover.app as you read, so the tracking site follows the device rather than needing to be told."
+keywords = ["hardcover", "tracking", "reading status", "progress"]
+
+[plugins."patelneeraj/filebrowserplus.koplugin"]
+tier = "A"
+categories = ["files"]
+purpose = "Runs Filebrowser on the device itself, so files can be managed over the network from a computer's browser."
+keywords = ["filebrowser", "file manager", "network", "transfer"]
+
+[plugins."pxlflux/customisablesleepscreen.koplugin"]
+tier = "A"
+categories = ["ui", "reading"]
+purpose = "Puts reading statistics and book information on the sleep screen, with extensive control over what appears and how it is laid out."
+keywords = ["sleep screen", "screensaver", "statistics", "cover"]
+
+[plugins."ultimatejimmy/xray.koplugin"]
+tier = "A"
+categories = ["reading", "ai"]
+purpose = "Kindle-style X-Ray for KOReader: tracks characters and builds plot timelines as you read."
+note = "Uses an AI provider for its analysis, so it needs a key of your own."
+keywords = ["xray", "x-ray", "characters", "timeline", "plot"]
+
+[plugins."Euphoriyy/appearance.koplugin"]
+tier = "A"
+categories = ["ui"]
+purpose = "Broad control over how KOReader looks, gathering appearance settings that are otherwise scattered or unavailable."
+keywords = ["appearance", "theme", "customize", "look"]
+
+[plugins."omer-faruq/rssreader.koplugin"]
+tier = "A"
+categories = ["web"]
+purpose = "Follow RSS feeds from a single screen inside KOReader, reading the articles on the device."
+keywords = ["rss", "feeds", "news", "articles"]
+
+[plugins."KORComic/comicreader.koplugin"]
+tier = "A"
+categories = ["content", "reading"]
+purpose = "Improves reading of comics and other paged documents on KOReader. A reading experience, not a source of comics."
+keywords = ["comic", "comics", "paged", "cbz", "cbr"]
+
+[plugins."naleo/audiobookshelf.koplugin"]
+tier = "A"
+categories = ["library", "content"]
+purpose = "Browse and download books from an Audiobookshelf server you already run."
+keywords = ["audiobookshelf", "server", "download", "library"]
+
+[plugins."ckilb/pocketbooksync.koplugin"]
+tier = "A"
+categories = ["sync", "device"]
+purpose = "Pushes reading progress from KOReader into the PocketBook library, so the device's own progress bars stay correct."
+keywords = ["pocketbook", "progress", "sync"]
+
+[plugins."IntrovertedMage/AO3Downloader.koplugin"]
+tier = "A"
+categories = ["content"]
+purpose = "Download and read works from Archive Of Our Own on the device. Unofficial."
+keywords = ["ao3", "archive of our own", "fanfiction"]
+
 # ---------------------------------------------------------------- distinctions
 #
 # Pairs that look interchangeable and are not.
@@ -138,5 +227,29 @@ between = ["omer-faruq/webbrowser.koplugin", "iceyear/readeck.koplugin"]
 say = "The browser searches and reads pages directly. Readeck is an integration with a Readeck server you already run, so it is a read-later workflow rather than a browser."
 
 [[distinctions]]
-between = ["omer-faruq/simpleui_ext.koplugin", "JoeBumm/Koreader-Menu-customizer", "AnthonyGress/zen_ui.koplugin"]
-say = "SimpleUI Ext extends SimpleUI specifically. Menu Customizer hides menus and plugins. Zen UI replaces the interface with a minimal one. Three different jobs, not three ways to do one."
+between = ["omer-faruq/simpleui_ext.koplugin", "doctorhetfield-cmd/simpleui.koplugin", "JoeBumm/Koreader-Menu-customizer", "AnthonyGress/zen_ui.koplugin", "Euphoriyy/appearance.koplugin"]
+say = "SimpleUI Ext adds modules to SimpleUI and needs it installed. Menu Customizer hides entries from the menus you already have. Zen UI and Appearance change how KOReader looks without replacing the home screen. Different jobs, not competing versions of one."
+
+[[distinctions]]
+between = ["doctorhetfield-cmd/simpleui.koplugin", "AndyHazz/bookshelf.koplugin"]
+say = "Both replace the home screen and you would install one, not both. SimpleUI is a whole minimal interface with its own navigation and status bars; Bookshelf is a library browser that leads with covers, series and progress."
+
+[[distinctions]]
+between = ["omer-faruq/appstore.koplugin", "ultimatejimmy/storefront.koplugin", "advokatb/updatesmanager.koplugin"]
+say = "Three separate projects for installing and updating plugins from the device. AppStore and Storefront both browse and install; Updates Manager only tracks updates across repositories you name."
+
+[[distinctions]]
+between = ["ZlibraryKO/zlibrary.koplugin", "OctoNezd/zlibrary.koplugin"]
+say = "Two independent Z-Library clients by different authors, not versions of one project."
+
+[[distinctions]]
+between = ["stradichenko/audiobook.koplugin", "naleo/audiobookshelf.koplugin"]
+say = "Audiobook is read-along inside a book. Audiobookshelf connects to an Audiobookshelf server to browse and download. Different jobs that share a word."
+
+[[distinctions]]
+between = ["ultimatejimmy/xray.koplugin", "Arararararagi/charactertracker.koplugin"]
+say = "Both follow characters through a book. X-Ray builds timelines and insights using an AI provider you supply; Character Tracker does not require one."
+
+[[distinctions]]
+between = ["KORComic/comicreader.koplugin", "tachibana-shin/rakuyomi"]
+say = "Comic Reader improves how paged comics are displayed; Rakuyomi fetches manga from online sources. One is a reading experience, the other is where the content comes from."
