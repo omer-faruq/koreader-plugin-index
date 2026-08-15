@@ -1,0 +1,68 @@
+# Known question / answer pairs, seeded from the "Recommendation Examples"
+# section of the hand-written AppStore knowledge base. That section was already
+# written as query -> expected-plugin pairs, which makes it a ready-made
+# regression suite for ranking.
+#
+# The build fails when an expected answer falls out of the top three. Add a
+# case whenever a recommendation comes out wrong: that is how the ranking gets
+# tuned by measurement rather than by guessing.
+
+[[case]]
+query = "I want AI help while reading"
+expect_top3 = ["omer-faruq/assistant.koplugin"]
+
+[[case]]
+query = "read websites on my e-reader"
+expect_top3 = ["omer-faruq/webbrowser.koplugin"]
+
+[[case]]
+query = "sync my highlights between devices"
+expect_top3 = ["gitalexcampos/highlightsync.koplugin"]
+
+[[case]]
+query = "keep annotations synchronised across devices"
+expect_top3 = ["dani84bs/AnnotationSync.koplugin", "gitalexcampos/highlightsync.koplugin"]
+
+[[case]]
+query = "Anki integration for vocabulary"
+expect_top3 = ["Ajatt-Tools/anki.koplugin"]
+
+[[case]]
+query = "access my Zotero library"
+expect_top3 = ["stelzch/zotero.koplugin"]
+
+[[case]]
+query = "browse an OPDS ebook catalog"
+expect_top3 = ["greywolf1499/opds_plus.koplugin"]
+
+[[case]]
+query = "customise the SimpleUI homescreen"
+expect_top3 = ["omer-faruq/simpleui_ext.koplugin"]
+
+[[case]]
+query = "hide menus and simplify the interface"
+expect_top3 = ["JoeBumm/Koreader-Menu-customizer", "AnthonyGress/zen_ui.koplugin"]
+
+[[case]]
+query = "wireless file transfer without cables"
+expect_top3 = ["kaikozlov/localsend.koplugin"]
+
+[[case]]
+query = "save web articles to read later"
+expect_top3 = ["iceyear/readeck.koplugin"]
+
+[[case]]
+query = "read manga and comics"
+expect_top3 = ["tachibana-shin/rakuyomi"]
+
+[[case]]
+query = "translate text while reading"
+expect_top3 = ["omer-faruq/assistant.koplugin"]
+
+[[case]]
+query = "handwritten notes with a stylus"
+expect_top3 = ["mysticknits/pencil.koplugin"]
+
+[[case]]
+query = "text overlays on the reading screen"
+expect_top3 = ["AndyHazz/bookends.koplugin"]

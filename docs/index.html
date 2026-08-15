@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KOReader Plugin Finder</title>
+<meta name="description" content="Describe what you want to do; find the KOReader plugin that does it.">
+<style>
+/* Light is the base palette. Dark redefines only the tokens, so no colour is
+   ever defined solely inside a media query. */
+:root {
+  --bg: #f7f7f5;
+  --surface: #ffffff;
+  --surface-2: #f0efec;
+  --border: #dcdad4;
+  --text: #1a1a18;
+  --muted: #6b6a64;
+  --accent: #2f5d50;
+  --accent-soft: #e4efe9;
+  --tier-a: #2f5d50;
+  --tier-b: #4a5568;
+  --tier-c: #8a6d3b;
+  --warn-bg: #fdf3e3;
+  --warn-border: #e6d3ab;
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(0,0,0,.05), 0 4px 12px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #16171a;
+    --surface: #1e2024;
+    --surface-2: #26282d;
+    --border: #34373d;
+    --text: #e8e8e6;
+    --muted: #9b9c9e;
+    --accent: #7fc0aa;
+    --accent-soft: #22322c;
+    --tier-a: #7fc0aa;
+    --tier-b: #9aa6b8;
+    --tier-c: #d0ac6d;
+    --warn-bg: #2b2416;
+    --warn-border: #4b3f22;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 12px rgba(0,0,0,.25);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #16171a; --surface: #1e2024; --surface-2: #26282d; --border: #34373d;
+  --text: #e8e8e6; --muted: #9b9c9e; --accent: #7fc0aa; --accent-soft: #22322c;
+  --tier-a: #7fc0aa; --tier-b: #9aa6b8; --tier-c: #d0ac6d;
+  --warn-bg: #2b2416; --warn-border: #4b3f22;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 12px rgba(0,0,0,.25);
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+.wrap { max-width: 860px; margin: 0 auto; padding: 24px 20px 72px; }
+
+header { margin-bottom: 22px; }
+h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
+.tagline { color: var(--muted); margin: 0 0 12px; }
+
+/* The index is deliberately stale between nightly runs. Saying so turns a
+   discrepancy against the live GitHub catalogue into transparency. */
+.freshness {
+  display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline;
+  font-size: .82rem; color: var(--muted);
+  padding: 8px 12px; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: var(--radius);
+}
+.freshness b { color: var(--text); font-weight: 600; }
+
+.searchbar { position: relative; margin: 20px 0 14px; }
+#q {
+  width: 100%; padding: 15px 44px 15px 16px; font-size: 1.05rem;
+  color: var(--text); background: var(--surface);
+  border: 1.5px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+#q:focus { outline: none; border-color: var(--accent); }
+#clear {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  border: 0; background: transparent; color: var(--muted);
+  font-size: 1.3rem; cursor: pointer; padding: 4px 8px; line-height: 1;
+}
+
+.chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; }
+.chip {
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--text); border-radius: 999px; padding: 6px 13px;
+  font-size: .86rem; cursor: pointer;
+}
+.chip:hover { border-color: var(--accent); }
+.chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.chip .n { color: var(--muted); font-size: .78rem; margin-left: 5px; }
+.chip[aria-pressed="true"] .n { color: inherit; opacity: .75; }
+
+.toolbar {
+  display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
+  justify-content: space-between; margin-bottom: 16px;
+  font-size: .85rem; color: var(--muted);
+}
+.toolbar label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+
+.note {
+  background: var(--warn-bg); border: 1px solid var(--warn-border);
+  border-radius: var(--radius); padding: 11px 14px; margin-bottom: 14px;
+  font-size: .89rem;
+}
+.note b { display: block; margin-bottom: 3px; }
+
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 15px 17px; margin-bottom: 11px;
+  box-shadow: var(--shadow);
+}
+.card-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+.card-head h3 { margin: 0; font-size: 1.03rem; }
+.card-head h3 a { color: var(--text); text-decoration: none; }
+.card-head h3 a:hover { color: var(--accent); text-decoration: underline; }
+.owner { color: var(--muted); font-size: .85rem; }
+.purpose { margin: 8px 0 0; }
+.purpose.empty { color: var(--muted); font-style: italic; }
+
+.badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; align-items: center; }
+.badge {
+  font-size: .74rem; padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--border); color: var(--muted); background: var(--surface-2);
+  white-space: nowrap;
+}
+.badge.tier-A { color: var(--tier-a); border-color: var(--tier-a); font-weight: 600; }
+.badge.tier-B { color: var(--tier-b); border-color: var(--tier-b); }
+.badge.tier-C { color: var(--tier-c); border-color: var(--tier-c); }
+.why { color: var(--muted); font-size: .8rem; margin-left: auto; }
+.why span { color: var(--accent); }
+
+.actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.actions a {
+  font-size: .84rem; text-decoration: none; color: var(--accent);
+  border: 1px solid var(--border); border-radius: 7px; padding: 5px 11px;
+}
+.actions a:hover { border-color: var(--accent); background: var(--accent-soft); }
+
+.state { text-align: center; padding: 44px 20px; color: var(--muted); }
+.state a { color: var(--accent); }
+.section-title { font-size: .82rem; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--muted); margin: 26px 0 10px; font-weight: 600; }
+footer { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--border);
+  font-size: .82rem; color: var(--muted); }
+footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>KOReader Plugin Finder</h1>
+  <p class="tagline">Describe what you want to do. Not what the plugin is called.</p>
+  <div class="freshness" id="freshness">Loading index…</div>
+</header>
+
+<div class="searchbar">
+  <input id="q" type="search" autocomplete="off" autofocus
+         placeholder="e.g. sync my highlights between devices">
+  <button id="clear" hidden aria-label="Clear">×</button>
+</div>
+
+<div class="chips" id="chips"></div>
+
+<div class="toolbar">
+  <label><input type="checkbox" id="showC"> Include dormant, forks and stubs</label>
+  <span id="count"></span>
+</div>
+
+<div id="notes"></div>
+<div id="results"><div class="state">Loading…</div></div>
+
+<footer>
+  Built nightly from the <code>koreader-plugin</code> GitHub topic ·
+  <a href="https://github.com/omer-faruq/koreader-plugin-index">source &amp; curation</a> ·
+  <a href="https://omer-faruq.github.io/appstore.koplugin/">full AppStore catalogue</a>
+</footer>
+
+</div>
+
+<script>
+"use strict";
+
+const APPSTORE = "https://omer-faruq.github.io/appstore.koplugin/";
+
+/* ---------------------------------------------------------------- ranking
+   Mirrors scripts/rank.py. The quality suite in tests/queries.toml measures
+   that file, so the two must stay in step -- a change to the weights here
+   without the same change there means the tests stop describing what users
+   actually see. */
+
+const WEIGHT = { name: 4, keyword: 3, purpose: 2, description: 2, category: 2 };
+const TIER_BONUS = { A: 3, B: 1, C: -2.5 };
+const MIN_PREFIX = 4;
+const MIN_INDEX_PREFIX = 3;
+
+const STOPWORDS = new Set([
+  "i","want","to","a","an","the","my","me","for","with","on","in","of","and",
+  "or","how","do","can","is","it","that","this","which","koreader","plugin",
+  "plugins","please","need","looking","some",
+  // Everything here is about reading on an e-reader, so these carry no signal
+  // and actively mislead: "read" pulls in Readeck and every README that says it.
+  "read","reads","reading","reader","ereader","book","books"
+]);
+
+const words = s => (s || "").toLowerCase().match(/[a-z0-9]+/g) || [];
+
+function tokenise(text) {
+  return words(text).filter(t => t.length > 1 && !STOPWORDS.has(t));
+}
+
+function hits(tokens, haystack) {
+  if (!haystack) return 0;
+  const pool = new Set(words(haystack));
+  let n = 0;
+  for (const t of tokens) {
+    if (pool.has(t)) { n++; continue; }
+    if (t.length < MIN_PREFIX) continue;
+    for (const w of pool) {
+      if (w.startsWith(t) || (w.length >= MIN_INDEX_PREFIX && t.startsWith(w))) { n++; break; }
+    }
+  }
+  return n;
+}
+
+function score(entry, tokens) {
+  if (!tokens.length) return 0;
+  let s = 0;
+  s += WEIGHT.name * hits(tokens, entry.repo);
+  s += WEIGHT.keyword * hits(tokens, (entry.keywords || []).join(" "));
+  s += WEIGHT.purpose * hits(tokens, entry.purpose);
+  s += WEIGHT.description * hits(tokens, entry.description);
+  s += WEIGHT.category * hits(tokens, (entry.categories || []).join(" "));
+  if (s <= 0) return 0;
+  s += TIER_BONUS[entry.tier] ?? 0;
+  s += Math.log10(Math.max(entry.stars || 0, 0) + 1);
+  return s;
+}
+
+function explain(entry, tokens) {
+  const set = new Set(tokens);
+  let matched = (entry.keywords || []).filter(k => set.has(k));
+  if (!matched.length) {
+    const pool = new Set(words(entry.purpose));
+    matched = tokens.filter(t => pool.has(t));
+  }
+  return matched.slice(0, 4);
+}
+
+/* ------------------------------------------------------------------- state */
+
+const state = { index: null, query: "", category: null, showC: false };
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+/* ------------------------------------------------------------------ render */
+
+function tierLabel(entry) {
+  if (entry.tier === "A") return "curated";
+  if (entry.tier === "B") return "community";
+  // C is shown with the reason it was demoted rather than hidden outright:
+  // knowing why something is down-ranked is more useful than not seeing it.
+  const r = entry.tier_reasons || [];
+  if (r.includes("archived")) return "archived";
+  if (r.includes("fork")) return "fork";
+  if (r.includes("dormant")) return "no updates in a year";
+  if (r.includes("no_meta")) return "no _meta.lua";
+  if (r.includes("stub")) return "barely documented";
+  return "unverified";
+}
+
+function card(entry, tokens) {
+  const why = explain(entry, tokens);
+  const handoff = `${APPSTORE}?tab=plugins&owner=${encodeURIComponent(entry.owner)}&q=${encodeURIComponent(entry.repo)}`;
+  return `
+  <article class="card">
+    <div class="card-head">
+      <h3><a href="${esc(entry.url)}" target="_blank" rel="noopener">${esc(entry.repo)}</a></h3>
+      <span class="owner">${esc(entry.owner)}</span>
+    </div>
+    <p class="purpose${entry.purpose ? "" : " empty"}">${
+      entry.purpose ? esc(entry.purpose)
+                    : esc(entry.description) || "No description available."
+    }</p>
+    <div class="badges">
+      <span class="badge tier-${esc(entry.tier)}">${esc(tierLabel(entry))}</span>
+      <span class="badge">★ ${entry.stars ?? 0}</span>
+      ${(entry.categories || []).map(c => `<span class="badge">${esc(c)}</span>`).join("")}
+      ${why.length ? `<span class="why">matched <span>${why.map(esc).join(", ")}</span></span>` : ""}
+    </div>
+    <div class="actions">
+      <a href="${esc(handoff)}" target="_blank" rel="noopener">Open in AppStore →</a>
+      <a href="${esc(entry.url)}" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </article>`;
+}
+
+/* Distinctions are the part of the catalogue a README cannot produce. They are
+   surfaced exactly when two entries that look alike are both on screen. */
+function noteFor(shown) {
+  const ids = new Set(shown.map(e => e.id));
+  return (state.index.distinctions || [])
+    .filter(d => (d.between || []).filter(x => ids.has(x)).length >= 2)
+    .map(d => `<div class="note"><b>These look alike, and are not</b>${esc(d.say)}</div>`)
+    .join("");
+}
+
+function render() {
+  const idx = state.index;
+  const tokens = tokenise(state.query);
+  let list = idx.plugins.slice();
+
+  if (state.category) list = list.filter(e => (e.categories || []).includes(state.category));
+  if (!state.showC) list = list.filter(e => e.tier !== "C");
+
+  let heading = "";
+  if (tokens.length) {
+    list = list.map(e => [score(e, tokens), e]).filter(p => p[0] > 0)
+               .sort((a, b) => b[0] - a[0] || a[1].id.localeCompare(b[1].id))
+               .map(p => p[1]).slice(0, 30);
+    heading = `${list.length} match${list.length === 1 ? "" : "es"}`;
+  } else {
+    // No query: lead with the curated set rather than the most-starred, which
+    // is what someone browsing without a goal actually wants to see.
+    list.sort((a, b) => (TIER_BONUS[b.tier] - TIER_BONUS[a.tier]) || (b.stars - a.stars));
+    list = list.slice(0, 30);
+    heading = state.category ? "In this category" : "Worth starting with";
+  }
+
+  $("count").textContent = tokens.length ? heading : "";
+  $("notes").innerHTML = list.length ? noteFor(list) : "";
+
+  if (!list.length) {
+    $("results").innerHTML = `<div class="state">
+      Nothing matched.${state.showC ? "" : " Try including dormant entries above,"}
+      or browse the <a href="${APPSTORE}" target="_blank" rel="noopener">full catalogue</a>.
+    </div>`;
+    return;
+  }
+
+  $("results").innerHTML =
+    (tokens.length ? "" : `<div class="section-title">${esc(heading)}</div>`) +
+    list.map(e => card(e, tokens)).join("");
+}
+
+function renderChips() {
+  $("chips").innerHTML = (state.index.categories || [])
+    .map(c => `<button class="chip" data-id="${esc(c.id)}" aria-pressed="false">${
+      esc(c.label)}<span class="n">${c.count}</span></button>`).join("");
+  $("chips").querySelectorAll(".chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      const id = chip.dataset.id;
+      state.category = state.category === id ? null : id;
+      $("chips").querySelectorAll(".chip").forEach(c =>
+        c.setAttribute("aria-pressed", String(c.dataset.id === state.category)));
+      render();
+    });
+  });
+}
+
+function renderFreshness() {
+  const idx = state.index;
+  const when = idx.generated_at
+    ? new Date(idx.generated_at).toLocaleDateString(undefined,
+        { year: "numeric", month: "short", day: "numeric" })
+    : "unknown";
+  const c = idx.counts || {};
+  $("freshness").innerHTML =
+    `<span>Index: <b>${esc(when)}</b></span>` +
+    `<span><b>${c.plugins ?? 0}</b> plugins</span>` +
+    (c.patches ? `<span><b>${c.patches}</b> patches</span>` : "") +
+    `<span>rebuilt nightly</span>`;
+}
+
+/* -------------------------------------------------------------------- boot */
+
+async function boot() {
+  try {
+    const resp = await fetch("index.json", { cache: "no-cache" });
+    if (!resp.ok) throw new Error(resp.status);
+    state.index = await resp.json();
+  } catch (err) {
+    // A missing index must not be a dead end: the live AppStore catalogue does
+    // not depend on this project and keeps working when this one does not.
+    $("freshness").textContent = "Index unavailable";
+    $("results").innerHTML = `<div class="state">
+      Could not load the index (${esc(err.message)}).<br>
+      You can still search the live catalogue on the
+      <a href="${APPSTORE}" target="_blank" rel="noopener">AppStore page</a>.
+    </div>`;
+    return;
+  }
+
+  renderFreshness();
+  renderChips();
+
+  const params = new URLSearchParams(location.search);
+  if (params.has("q")) { state.query = params.get("q"); $("q").value = state.query; }
+
+  let timer;
+  $("q").addEventListener("input", e => {
+    state.query = e.target.value;
+    $("clear").hidden = !state.query;
+    clearTimeout(timer);
+    timer = setTimeout(render, 120);
+  });
+  $("clear").addEventListener("click", () => {
+    state.query = ""; $("q").value = ""; $("clear").hidden = true; $("q").focus(); render();
+  });
+  $("showC").addEventListener("change", e => { state.showC = e.target.checked; render(); });
+
+  $("clear").hidden = !state.query;
+  render();
+}
+
+boot();
+</script>
+</body>
+</html>

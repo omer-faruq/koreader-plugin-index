@@ -1,0 +1,79 @@
+name: Build index
+
+# Two cadences. The daily run asks GitHub only for repositories pushed since
+# last time and carries everything else over from the published index, which
+# costs roughly ten requests. The monthly run rebuilds from scratch to catch
+# what a diff cannot see: deleted repositories, removed topics, and entries
+# that need reprocessing after the extraction rules or curation.toml changed.
+on:
+  schedule:
+    - cron: "0 3 * * *"    # daily, diff
+    - cron: "0 4 1 * *"    # 1st of the month, full
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Build mode"
+        type: choice
+        options: [diff, full]
+        default: full
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let a monthly full run and a daily diff publish over each other.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"   # tomllib is stdlib from 3.11; nothing to install
+
+      - name: Decide mode
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "0 4 1 * *" ]; then
+            echo "mode=full" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=diff" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/build.py --mode "${{ steps.mode.outputs.mode }}"
+
+      - name: Quality tests
+        run: python scripts/test_queries.py
+
+      # The page reimplements rank.py in JavaScript. If they drift, the quality
+      # suite keeps passing while users see different results.
+      - name: Ranking parity
+        run: python tests/parity_check.py
+
+      # Published as an artifact rather than committed. Committing generated
+      # JSON every night would bloat the history, and any commit here would
+      # register as a release to anything watching the repository.
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
