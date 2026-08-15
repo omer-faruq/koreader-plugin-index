@@ -170,6 +170,20 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
   border-radius: 6px; cursor: pointer; font-size: .95rem; padding: 4px 9px; flex: none;
 }
 .icon-btn:hover { border-color: var(--accent); background: var(--accent-soft); }
+.tuning { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+.tuning h3 { margin: 0 0 4px; font-size: .92rem; }
+.tune-row {
+  display: grid; grid-template-columns: 1fr 92px auto; gap: 6px 10px;
+  align-items: center; margin-top: 12px;
+}
+.tune-row label { font-size: .85rem; color: var(--text); }
+.tune-row input {
+  padding: 6px 9px; font-size: .9rem; color: var(--text); background: var(--bg);
+  border: 1px solid var(--border); border-radius: 7px; width: 100%;
+}
+.tune-row .field-hint { grid-column: 1 / -1; margin-top: -2px; }
+#tuneCost { margin-top: 14px; }
+
 .sheet-foot { margin: 12px 0 0; font-size: .76rem; color: var(--muted); }
 .muted-note { display: inline-block; max-width: 46ch; margin-top: 10px;
   font-size: .8rem; line-height: 1.5; }
@@ -427,6 +441,41 @@ footer a { color: var(--accent); }
         <button class="btn" id="aiSave">Save</button>
         <button class="btn ghost" id="aiClear">Forget key</button>
       </div>
+
+      <div class="tuning">
+        <h3>Search tuning</h3>
+        <p class="field-hint">Defaults come from testing against this catalogue.
+          Two of them are floors and only go up — spending more can buy better
+          answers, but searching less than what was tested only buys worse ones.</p>
+
+        <div class="tune-row">
+          <label for="tuneShortlist">Candidates sent to the model</label>
+          <input id="tuneShortlist" type="number" min="40" max="120" step="5">
+          <button class="icon-btn" data-reset="shortlist" title="Back to 40">↺</button>
+          <span class="field-hint">Raising it finds answers that rank poorly on
+            keywords, at more tokens a question. 40 is the floor — below it the
+            tested answers start dropping off the end of the list.</span>
+        </div>
+
+        <div class="tune-row">
+          <label for="tunePicks">Most results to return</label>
+          <input id="tunePicks" type="number" min="1" max="12" step="1">
+          <button class="icon-btn" data-reset="picks" title="Back to 4">↺</button>
+          <span class="field-hint">A ceiling, not a target — the model returns only
+            what genuinely fits, which is often one or two.</span>
+        </div>
+
+        <div class="tune-row">
+          <label for="tuneChars">Text per candidate</label>
+          <input id="tuneChars" type="number" min="1080" max="4000" step="100">
+          <button class="icon-btn" data-reset="chars" title="Back to 1080">↺</button>
+          <span class="field-hint">Characters of description and feature list per
+            candidate. 1080 is the floor: under it the model starts judging plugins
+            on their opening slogan rather than what they do.</span>
+        </div>
+
+        <p class="field-hint" id="tuneCost"></p>
+      </div>
     </div>
 
     <div id="aiOut"></div>
@@ -610,7 +659,36 @@ const PROVIDERS = {
 // a fraction of a cent anywhere. The real risk is the opposite: the right
 // answer ranking 26th and never reaching the model at all. Keyword ranking is
 // the weak link this layer exists to cover, so the net is worth widening.
-const SHORTLIST = 40;
+// Arrived at by measuring rather than taste: 25 candidates left the right
+// answer ranked 26th, and a candidate described in under a kilobyte lost the
+// feature that answered the question.
+//
+// Two of the three are quality floors, not preferences, so they can only be
+// raised. Someone paying for a larger model may well want a wider shortlist or
+// fuller descriptions; nobody benefits from quietly searching less than what
+// was tested, and a bad low value would show up as "the AI is useless" rather
+// than as a setting.
+//
+// Results returned is different: wanting only the single best answer is a
+// preference about reading, not a way to get worse ones, so it opens both ways.
+const TUNING_DEFAULTS = { shortlist: 40, picks: 4, chars: 1080 };
+const TUNING_RANGE = {
+  shortlist: [TUNING_DEFAULTS.shortlist, 120],
+  picks: [1, 12],
+  chars: [TUNING_DEFAULTS.chars, 4000]
+};
+
+function tuning() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem("kpi.tuning") || "{}"); } catch {}
+  const clamp = (v, lo, hi, fallback) =>
+    Number.isFinite(+v) && +v >= lo && +v <= hi ? Math.round(+v) : fallback;
+  const out = {};
+  for (const [key, [lo, hi]] of Object.entries(TUNING_RANGE)) {
+    out[key] = clamp(saved[key], lo, hi, TUNING_DEFAULTS[key]);
+  }
+  return out;
+}
 
 // Stage one. Retrieval is keyword matching against an English index, so a
 // question in another language scores zero everywhere and a wordy one scores
@@ -638,7 +716,7 @@ const PATCH_RULES = [
 const SYSTEM_PROMPT = [
   "You help people find KOReader plugins.",
   "You are given a question and a shortlist of candidates, each with its stated purpose.",
-  "Choose only the ones that genuinely solve the stated problem, at most four, best first.",
+  "Choose only the ones that genuinely solve the stated problem, at most {PICKS}, best first.",
   "A candidate matching on a word is not the same as it doing the job: a plugin that",
   "answers questions about highlighted text does not synchronise highlights between devices.",
   "Never name anything outside the shortlist. Never claim a capability the purpose does not state.",
@@ -674,7 +752,7 @@ function shortlistFor(query) {
       .filter(p => p[0] > 0)
       .sort((a, b) => b[0] - a[0])
       .map(p => p[1])
-  ).slice(0, SHORTLIST);
+  ).slice(0, tuning().shortlist);
 
   // Deduping happens again after any top-up. Doing it only here let the
   // fallback undo it: collapsing four forks dropped the count below the floor,
@@ -691,14 +769,17 @@ function shortlistFor(query) {
   const filler = pool
     .filter(e => !have.has(e.id))
     .sort((a, b) => (TIER_BONUS[b.tier] - TIER_BONUS[a.tier]) || (b.stars - a.stars));
-  return dedupeVariants(matched.concat(filler)).slice(0, SHORTLIST);
+  return dedupeVariants(matched.concat(filler)).slice(0, tuning().shortlist);
 }
 
 function compact(entry) {
+  // Three tenths of the budget to the opening prose, the rest to features,
+  // which is where a plugin usually states the thing being asked about.
+  const budget = tuning().chars;
   const out = {
     id: entry.id,
     ...(entry.path ? { patch_file: entry.path, load_order: entry.order } : {}),
-    purpose: (entry.purpose || entry.description || "").slice(0, 320),
+    purpose: (entry.purpose || entry.description || "").slice(0, Math.round(budget * 0.3)),
     categories: entry.categories,
     stars: entry.stars,
     status: entry.activity,
@@ -714,7 +795,15 @@ function compact(entry) {
   // Cost is not the constraint here; sending too little was the mistake. Raw
   // README paragraphs would cost the same and spend most of it on install
   // steps, which is why this is the feature list rather than more prose.
-  if (entry.features && entry.features.length) out.features = entry.features.slice(0, 10);
+  if (entry.features && entry.features.length) {
+    const room = budget - (out.purpose || "").length;
+    const kept = [];
+    for (const item of entry.features) {
+      if (kept.reduce((n, x) => n + x.length, 0) + item.length > room) break;
+      kept.push(item);
+    }
+    if (kept.length) out.features = kept;
+  }
   // Named so the model can prefer an original over a copy of it.
   if (entry.is_fork) out.fork_of_another_project = true;
   return out;
@@ -828,9 +917,8 @@ async function runAI() {
 
   let result;
   try {
-    const system = state.tab === "patches"
-      ? SYSTEM_PROMPT + " " + PATCH_RULES
-      : SYSTEM_PROMPT;
+    const base = SYSTEM_PROMPT.replace("{PICKS}", String(tuning().picks));
+    const system = state.tab === "patches" ? base + " " + PATCH_RULES : base;
     result = await callModel(cfg, system, JSON.stringify({
       question,
       looking_for: state.tab === "patches" ? "user patches" : "plugins",
@@ -1390,6 +1478,33 @@ function setupAI() {
   $("aiQuestion").addEventListener("keydown", e => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); runAI(); }
   });
+
+  // Tuning: written on change, clamped on read, and each field can go back to
+  // its measured default on its own.
+  const TUNE_FIELDS = { shortlist: "tuneShortlist", picks: "tunePicks", chars: "tuneChars" };
+  const showTuning = () => {
+    const t = tuning();
+    for (const [key, id] of Object.entries(TUNE_FIELDS)) $(id).value = t[key];
+    // Rough, and said to be rough: token counts vary by model and tokeniser.
+    const tokens = Math.round(t.shortlist * (t.chars + 60) / 4 / 100) * 100;
+    $("tuneCost").textContent =
+      `About ${tokens.toLocaleString()} tokens a question — a fraction of a cent on most providers.`;
+  };
+  const writeTuning = () => {
+    const next = {};
+    for (const [key, id] of Object.entries(TUNE_FIELDS)) next[key] = $(id).value;
+    localStorage.setItem("kpi.tuning", JSON.stringify(next));
+    showTuning();
+  };
+  for (const id of Object.values(TUNE_FIELDS)) $(id).addEventListener("change", writeTuning);
+  $("aiPanel").querySelectorAll("[data-reset]").forEach(button => {
+    button.addEventListener("click", () => {
+      const key = button.dataset.reset;
+      $(TUNE_FIELDS[key]).value = TUNING_DEFAULTS[key];
+      writeTuning();
+    });
+  });
+  showTuning();
 
   $("aiProvider").addEventListener("change", fill);
   $("aiSettingsToggle").addEventListener("click", () => { $("aiPanel").hidden = !$("aiPanel").hidden; });
