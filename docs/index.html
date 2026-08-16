@@ -322,6 +322,15 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
   padding: 8px 10px; font-size: .9rem; color: var(--text);
   background: var(--bg); border: 1px solid var(--border); border-radius: 7px;
 }
+/* The API key is masked by CSS rather than by type="password", which is the
+   only thing that actually keeps Chrome's password manager out of it. That
+   manager engages with password inputs specifically: it pairs one with the
+   nearest preceding text box and treats the field being hidden as a form
+   submission. Fighting the heuristic input by input did not work, because
+   every exit had to be covered separately and pressing Save hides the panel
+   with the key still in it -- the one moment nobody thought to clear. There is
+   no password field here now, so there is nothing to pair, submit or offer. */
+#aiKey { -webkit-text-security: disc; text-security: disc; }
 .panel-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; font-size: .82rem; color: var(--muted); }
 .btn {
   border: 1px solid var(--accent); background: var(--accent-soft); color: var(--accent);
@@ -532,8 +541,13 @@ footer a { color: var(--accent); }
             usually your base URL plus <code>/v1/chat/completions</code>. Anything
             speaking the OpenAI format works, including a local server.</span>
         </label>
-        <label class="wide">API key <input id="aiKey" type="password" name="kpi-provider-token"
-                 autocomplete="new-password" data-1p-ignore data-lpignore="true"
+        <!-- Not type="password", and not autocomplete="new-password" either:
+             that is the sign-up signal, so it asks Chrome to save a new
+             password rather than to leave this one alone. Masking is done in
+             CSS; script puts the password type back where that is unsupported. -->
+        <label class="wide">API key <input id="aiKey" type="text" name="kpi-provider-token"
+                 autocomplete="off" autocapitalize="off" autocorrect="off"
+                 data-1p-ignore data-lpignore="true"
                  spellcheck="false" placeholder="stored in this browser"></label>
       </div>
       <div class="panel-actions">
@@ -1593,6 +1607,13 @@ async function boot() {
 }
 
 function setupAI() {
+  // Firefox only learned -webkit-text-security in 116, and a key typed in clear
+  // text on a shared machine is a worse problem than a browser offering to save
+  // it. Where the masking cannot happen, the password field comes back.
+  if (!(window.CSS && CSS.supports && CSS.supports("-webkit-text-security", "disc"))) {
+    $("aiKey").type = "password";
+  }
+
   const cfg = aiConfig() || { provider: "deepseek", model: "", url: "", key: "" };
   const fill = () => {
     const preset = PROVIDERS[$("aiProvider").value] || PROVIDERS.custom;
@@ -1643,8 +1664,6 @@ function setupAI() {
   // keyword filter, the chips and the browse list are all inapplicable, and
   // leaving them behind a scrim only invites clicking them.
   const openDialog = () => {
-    const stored = aiConfig();
-    if (stored && stored.key) $("aiKey").value = stored.key;
     $("aiHeading").textContent = state.tab === "patches"
       ? "Describe what you need — searching patches"
       : "Describe what you need";
@@ -1659,12 +1678,10 @@ function setupAI() {
     syncUrl();
   };
   const closeDialog = () => {
-    // Chrome pairs a password input with the nearest preceding text box and
-    // treats the view change as a form submission -- it was offering to save
-    // the search query as a username against the API key. Clearing the field
-    // on the way out leaves it nothing to offer; the key itself is already
-    // saved in localStorage by then.
-    $("aiKey").value = "";
+    // Emptying the key field on the way out used to live here, to leave Chrome
+    // nothing to offer to save. The field is no longer a password input, so
+    // there is nothing to hide from -- and the key stays visible in the panel
+    // where the reader put it, which is what "stored in this browser" means.
     $("aiView").hidden = true;
     $("browseView").hidden = false;
     syncUrl();
