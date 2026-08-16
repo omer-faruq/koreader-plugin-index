@@ -45,9 +45,11 @@ body {
 .wrap { max-width: 860px; margin: 0 auto; padding: 24px 20px 72px; }
 a { color: var(--accent); }
 h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
+/* The offset clears the sticky bar. Without it a jump from the contents list
+   lands the heading underneath it, which reads as the wrong section. */
 h2 {
   font-size: 1.15rem; margin: 34px 0 4px; padding-top: 14px;
-  border-top: 1px solid var(--border); scroll-margin-top: 12px;
+  border-top: 1px solid var(--border); scroll-margin-top: 78px;
 }
 .count { color: var(--muted); font-weight: 400; font-size: .85rem; }
 h3 { font-size: 1rem; margin: 0 0 2px; }
@@ -59,7 +61,38 @@ h3 { font-size: 1rem; margin: 0 0 2px; }
 .lead p { margin: 0 0 8px; }
 .lead p:last-child { margin: 0; }
 .toc { display: flex; flex-wrap: wrap; gap: 6px 12px; padding: 0; margin: 12px 0 0; list-style: none; font-size: .9rem; }
-.entry { padding: 12px 0; border-bottom: 1px solid var(--border); scroll-margin-top: 12px; }
+
+/* Somebody who arrives from a search engine lands in the middle of a list of
+   several hundred entries, and the sentence at the top offering the finder has
+   long since scrolled away. This is that offer, kept within reach.
+   No script: a GET form navigates to ./?q=… and the finder reads the query
+   string on load, which is also what makes the page shareable. A page that
+   exists to work without JavaScript should not grow a search box that needs
+   it. */
+.jump {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; gap: 8px; align-items: center;
+  margin: 18px 0 0; padding: 10px 0;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.jump form { display: flex; gap: 8px; flex: 1; min-width: 0; }
+.jump input {
+  flex: 1; min-width: 0; padding: 9px 14px; font: inherit; font-size: .92rem;
+  color: var(--text); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 999px;
+}
+.jump input:focus { outline: none; border-color: var(--accent); }
+.jump button, .jump .ai {
+  border: 1px solid var(--border); background: var(--surface); color: var(--accent);
+  border-radius: 999px; padding: 9px 16px; font: inherit; font-size: .88rem;
+  font-weight: 600; cursor: pointer; text-decoration: none; white-space: nowrap;
+}
+.jump button:hover, .jump .ai:hover { border-color: var(--accent); background: var(--accent-soft); }
+.jump .ai { display: inline-flex; align-items: center; gap: 6px; }
+.jump .ai svg { width: 15px; height: 15px; fill: currentColor; }
+@media (max-width: 560px) { .jump .ai span { display: none; } }
+
+.entry { padding: 12px 0; border-bottom: 1px solid var(--border); scroll-margin-top: 78px; }
 .entry:last-child { border-bottom: 0; }
 .entry p { margin: 0; }
 .meta { color: var(--muted); font-size: .82rem; margin: 0 0 6px !important; }
@@ -292,6 +325,19 @@ def render_catalogue(index, patches, base, source, appstore):
   <p>Descriptions are extracted from each repository's own README by rule. No model
     writes them, and no entry here is an endorsement — every one carries its status.</p>
   <ul class="toc">{toc}</ul>
+</div>
+
+<div class="jump">
+  <form action="./" method="get" role="search">
+    <input type="search" name="q" autocomplete="off"
+           aria-label="Search the plugin finder"
+           placeholder="Search {len(plugins)} plugins in the finder — sync, manga, opds">
+    <button type="submit">Search</button>
+  </form>
+  <a class="ai" href="./?ai=1" title="Describe what you need in your own words">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3z"/><path d="M18 14l.9 2.1 2.1.9-2.1.9L18 20l-.9-2.1-2.1-.9 2.1-.9L18 14z"/></svg>
+    AI<span> Mode</span>
+  </a>
 </div>
 
 {chr(10).join(sections)}
