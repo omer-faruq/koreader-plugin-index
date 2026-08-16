@@ -333,7 +333,8 @@ footer a { color: var(--accent); }
 </div>
 
 <div class="searchbar">
-  <input id="q" type="search" autocomplete="off" autofocus
+  <input id="q" type="search" name="kpi-filter" autocomplete="off"
+         data-1p-ignore data-lpignore="true" autofocus
          placeholder="filter by keyword — sync, manga, opds">
   <button id="clear" hidden aria-label="Clear">×</button>
   <button id="askAi" title="Describe what you need in your own words">
@@ -428,7 +429,7 @@ footer a { color: var(--accent); }
             <option value="custom">Other (OpenAI-compatible)</option>
           </select>
         </label>
-        <label>Model <input id="aiModel" type="text" autocomplete="off"></label>
+        <label>Model <input id="aiModel" type="text" name="kpi-model" autocomplete="off"></label>
         <label class="wide" id="aiUrlWrap" hidden>
           API URL
           <input id="aiUrl" type="text" autocomplete="off">
@@ -436,7 +437,9 @@ footer a { color: var(--accent); }
             usually your base URL plus <code>/v1/chat/completions</code>. Anything
             speaking the OpenAI format works, including a local server.</span>
         </label>
-        <label class="wide">API key <input id="aiKey" type="password" autocomplete="off" placeholder="stored in this browser"></label>
+        <label class="wide">API key <input id="aiKey" type="password" name="kpi-provider-token"
+                 autocomplete="new-password" data-1p-ignore data-lpignore="true"
+                 spellcheck="false" placeholder="stored in this browser"></label>
       </div>
       <div class="panel-actions">
         <button class="btn" id="aiSave">Save</button>
@@ -1538,6 +1541,8 @@ function setupAI() {
   // keyword filter, the chips and the browse list are all inapplicable, and
   // leaving them behind a scrim only invites clicking them.
   const openDialog = () => {
+    const stored = aiConfig();
+    if (stored && stored.key) $("aiKey").value = stored.key;
     $("aiHeading").textContent = state.tab === "patches"
       ? "Describe what you need — searching patches"
       : "Describe what you need";
@@ -1552,6 +1557,12 @@ function setupAI() {
     syncUrl();
   };
   const closeDialog = () => {
+    // Chrome pairs a password input with the nearest preceding text box and
+    // treats the view change as a form submission -- it was offering to save
+    // the search query as a username against the API key. Clearing the field
+    // on the way out leaves it nothing to offer; the key itself is already
+    // saved in localStorage by then.
+    $("aiKey").value = "";
     $("aiView").hidden = true;
     $("browseView").hidden = false;
     syncUrl();
