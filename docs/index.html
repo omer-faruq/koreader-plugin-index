@@ -1194,6 +1194,7 @@ function render() {
     list.map(e => card(e, tokens)).join("");
 
   bindReadme($("results"), list);
+  syncUrl();
 }
 
 function showInstall(entry) {
@@ -1329,8 +1330,10 @@ function renderFreshness() {
   });
 })();
 
-// Keeps the address bar honest about which mode and tab you are in, so the page
-// can be reloaded, bookmarked or sent to someone and come back the same.
+// Keeps the address bar honest about the whole view -- mode, tab, query and
+// category -- so the page can be reloaded, bookmarked or sent to someone and
+// come back the same. This is why there is no share button: the browser
+// already has one, and it only works if the URL is telling the truth.
 // replaceState rather than pushState: switching modes is not a navigation and
 // should not put a stop on the back button between here and the page before.
 //
@@ -1341,6 +1344,8 @@ function syncUrl() {
   const params = new URLSearchParams();
   if (!$("aiView").hidden) params.set("ai", "1");
   if (state.tab === "patches") params.set("tab", "patches");
+  if (state.query.trim()) params.set("q", state.query.trim());
+  if (state.category) params.set("cat", state.category);
   const query = params.toString();
   history.replaceState(null, "", query ? `?${query}` : location.pathname);
 }
@@ -1467,6 +1472,15 @@ async function boot() {
   const params = new URLSearchParams(location.search);
   if (params.has("q")) { state.query = params.get("q"); $("q").value = state.query; }
   if (params.get("tab") === "patches") await switchTab("patches");
+  if (params.has("cat")) {
+    const known = (state.tab === "patches" ? state.patchCategories : state.index.categories) || [];
+    if (known.some(c => c.id === params.get("cat"))) {
+      state.category = params.get("cat");
+      renderChips();
+      $("chips").querySelectorAll(".chip").forEach(c =>
+        c.setAttribute("aria-pressed", String(c.dataset.id === state.category)));
+    }
+  }
   if (params.get("ai") === "1") $("askAi").click();
 
   $("clear").hidden = !state.query;
