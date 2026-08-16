@@ -91,8 +91,9 @@ covers it.
 
 ## Watching it run
 
-The nightly diff runs at 03:00 UTC and a full rebuild on the first of the
-month. Three ways to know it is still working, in order of effort:
+The nightly diff runs at 03:23 UTC and a full rebuild on the first of the
+month. GitHub's scheduler is best-effort, so a run can start late; the minute
+is deliberately not on the hour, which is the most contended slot. Three ways to know it is still working, in order of effort:
 
 - The badge above, and [the scheduled runs](https://github.com/omer-faruq/koreader-plugin-index/actions/workflows/build.yml?query=event%3Aschedule).
 - GitHub emails the repository owner when a scheduled run fails on the default

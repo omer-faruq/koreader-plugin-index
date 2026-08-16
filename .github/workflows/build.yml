@@ -6,9 +6,12 @@ name: Build index
 # what a diff cannot see: deleted repositories, removed topics, and entries
 # that need reprocessing after the extraction rules or curation.toml changed.
 on:
+  # Not on the hour. GitHub's scheduler is best-effort and the top of the hour
+  # is the most contended minute there is, so a run booked at :00 routinely
+  # waits. An odd minute gets picked up closer to the time asked for.
   schedule:
-    - cron: "0 3 * * *"    # daily, diff
-    - cron: "0 4 1 * *"    # 1st of the month, full
+    - cron: "23 3 * * *"    # daily, diff
+    - cron: "23 4 1 * *"    # 1st of the month, full
   workflow_dispatch:
     inputs:
       mode:
@@ -46,7 +49,7 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event.schedule }}" = "0 4 1 * *" ]; then
+          elif [ "${{ github.event.schedule }}" = "23 4 1 * *" ]; then
             echo "mode=full" >> "$GITHUB_OUTPUT"
           else
             echo "mode=diff" >> "$GITHUB_OUTPUT"
