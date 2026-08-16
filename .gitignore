@@ -13,3 +13,6 @@ js_out.json
 docs/readme-index.json
 docs/patches.json
 docs/llms.txt
+docs/catalogue.html
+docs/robots.txt
+docs/sitemap.xml

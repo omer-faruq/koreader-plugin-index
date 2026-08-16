@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="KOReader Plugin Finder">
+  <!-- A file rather than a data: URI in the page. Browsers accept either, but
+       the favicon shown next to a search result has to be fetchable at a URL of
+       its own, and a data: URI is not. -->
+  <rect width="32" height="32" rx="7" fill="#2f5d50"/>
+  <!-- A page being looked at: the two strokes are lines of text, the ring is
+       the lens. Legible at 16px, which is the only size that matters here. -->
+  <path d="M7 9.5h7M7 13.5h5" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity=".55"/>
+  <circle cx="17.5" cy="16.5" r="6" fill="none" stroke="#ffffff" stroke-width="2.4"/>
+  <path d="M22 21l3.5 3.5" stroke="#ffffff" stroke-width="2.8" stroke-linecap="round"/>
+</svg>

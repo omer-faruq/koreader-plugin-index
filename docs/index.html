@@ -3,8 +3,87 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>KOReader Plugin Finder</title>
-<meta name="description" content="Describe what you want to do; find the KOReader plugin that does it.">
+<title>KOReader Plugin Finder — search plugins and user patches by what they do</title>
+<meta name="description" content="Describe what you want to do and find the KOReader plugin that does it. A nightly-rebuilt index of community plugins and user patches for Kobo, Kindle and PocketBook, searchable by intent rather than by name.">
+
+<!-- The whole view lives in the query string so a search can be bookmarked and
+     sent on. That also means every filter someone shares is a separate URL for
+     the same page, so the canonical points at the bare one and the parameters
+     are treated as state rather than as pages. -->
+<link rel="canonical" href="https://omer-faruq.github.io/koreader-plugin-index/">
+<meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<meta name="color-scheme" content="light dark">
+<!-- Both, in the order browsers read them: the last matching one wins, so the
+     dark value only applies where the media query does. -->
+<meta name="theme-color" content="#f7f7f5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#16171a" media="(prefers-color-scheme: dark)">
+
+<!-- Without these a link to this page pastes into a chat as a bare URL, which
+     is how a catalogue nobody can see the point of gets ignored.
+     og.png is a designed card rather than a screenshot: previews are shown at
+     about 500px wide and cropped by some clients, and the interface shrunk to
+     that size is unreadable -- a screenshot would also have to be retaken
+     every time the page changes, which is the kind of upkeep this project
+     exists to avoid. og.svg beside it is the editable original. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="KOReader Plugin Finder">
+<meta property="og:title" content="KOReader Plugin Finder">
+<meta property="og:description" content="Describe what you want to do; find the KOReader plugin that does it. Community plugins and user patches, indexed nightly and searchable by intent.">
+<meta property="og:url" content="https://omer-faruq.github.io/koreader-plugin-index/">
+<meta property="og:locale" content="en">
+<!-- Absolute, and 1200x630: every service resolves this against its own host,
+     and the ones that do not read the dimensions guess them by downloading the
+     file first. -->
+<meta property="og:image" content="https://omer-faruq.github.io/koreader-plugin-index/og.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="KOReader Plugin Finder — describe what you want to do, not what the plugin is called.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="KOReader Plugin Finder">
+<meta name="twitter:description" content="Describe what you want to do; find the KOReader plugin that does it.">
+<meta name="twitter:image" content="https://omer-faruq.github.io/koreader-plugin-index/og.png">
+
+<!-- SearchAction is what makes a search box appear under the result in Google
+     rather than only a link. The URL template has to be the same one the page
+     itself produces, which is why it is `?q=` and nothing else. -->
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "WebSite",
+   "@id": "https://omer-faruq.github.io/koreader-plugin-index/#website",
+   "url": "https://omer-faruq.github.io/koreader-plugin-index/",
+   "name": "KOReader Plugin Finder",
+   "alternateName": "KOReader plugin index",
+   "description": "Search community KOReader plugins and user patches by what they do.",
+   "inLanguage": "en",
+   "potentialAction": {
+    "@type": "SearchAction",
+    "target": {
+     "@type": "EntryPoint",
+     "urlTemplate": "https://omer-faruq.github.io/koreader-plugin-index/?q={search_term_string}"
+    },
+    "query-input": "required name=search_term_string"
+   }
+  },
+  {
+   "@type": "WebApplication",
+   "name": "KOReader Plugin Finder",
+   "url": "https://omer-faruq.github.io/koreader-plugin-index/",
+   "applicationCategory": "BrowserApplication",
+   "operatingSystem": "Any",
+   "browserRequirements": "Requires JavaScript",
+   "isAccessibleForFree": true,
+   "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"},
+   "about": {"@type": "SoftwareApplication", "name": "KOReader", "applicationCategory": "BrowserApplication"},
+   "sameAs": "https://github.com/omer-faruq/koreader-plugin-index"
+  }
+ ]
+}
+</script>
 <style>
 /* Light is the base palette. Dark redefines only the tokens, so no colour is
    ever defined solely inside a media query. */
@@ -332,8 +411,12 @@ footer a { color: var(--accent); }
   <button class="tab" data-tab="patches" aria-pressed="false">Patches</button>
 </div>
 
-<div class="searchbar">
+<div class="searchbar" role="search">
+  <!-- The placeholder is not a label: it disappears the moment anyone types,
+       and a screen reader announcing an unlabelled search box is the one input
+       on the page that has to be understood without seeing it. -->
   <input id="q" type="search" name="kpi-filter" autocomplete="off"
+         aria-label="Filter plugins by keyword"
          data-1p-ignore data-lpignore="true" autofocus
          placeholder="filter by keyword — sync, manga, opds">
   <button id="clear" hidden aria-label="Clear">×</button>
@@ -353,6 +436,18 @@ footer a { color: var(--accent); }
 
 <div id="notes"></div>
 <div id="results"><div class="state">Loading…</div></div>
+
+<!-- Ranking, filtering and the AI mode all need scripts, and none of that can
+     be made to work without them. What can be made to work is reading the
+     catalogue, so the fallback is a real destination rather than an apology --
+     the same entries, generated as plain HTML by the same build. This is also
+     what crawlers that do not run JavaScript follow to find the contents. -->
+<noscript>
+  <div class="state">
+    Searching needs JavaScript. The full catalogue is readable without it on the
+    <a href="catalogue.html">plain catalogue page</a>.
+  </div>
+</noscript>
 </div><!-- /browseView -->
 
 <!-- A mode, not a dialog. The search box and a question are different inputs
@@ -487,10 +582,17 @@ footer a { color: var(--accent); }
   </div>
 </div>
 
+<!-- These links are also how the generated pages get found. A crawler that
+     stops at this page never sees catalogue.html or llms.txt unless something
+     here points at them; the sitemap asks, a link is what actually works. -->
 <footer>
   Built nightly from the <code>koreader-plugin</code> GitHub topic ·
+  <a href="catalogue.html">browse the catalogue</a> ·
   <a href="https://github.com/omer-faruq/koreader-plugin-index">source &amp; curation</a> ·
-  <a href="https://omer-faruq.github.io/appstore.koplugin/">full AppStore catalogue</a>
+  <a href="https://omer-faruq.github.io/appstore.koplugin/">full AppStore catalogue</a><br>
+  For assistants: <a href="llms.txt">llms.txt</a> ·
+  <a href="knowledge-base.md">knowledge base</a> ·
+  <a href="index.json">index.json</a>
 </footer>
 
 </div>

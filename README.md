@@ -35,6 +35,7 @@ scripts/build.py  ──  curation.toml  (hand-written judgement, merged on top)
 docs/index.json  ──►  search page      (this repo's GitHub Pages)
                  ──►  AppStore plugin  (on device, later)
                  ──►  knowledge-base.md for LLM assistants
+                 ──►  catalogue.html   for readers and crawlers without JS
 ```
 
 No model runs in the pipeline. Every field is extracted by rule, which is what
@@ -52,6 +53,7 @@ Running cost is zero: Actions and Pages are free for public repositories, and
 | `scripts/github.py` | GitHub client. Standard library only. |
 | `scripts/extract.py` | README → purpose, keywords, categories, tier. |
 | `scripts/rank.py` | Reference ranking. The search page mirrors these rules. |
+| `scripts/seo.py` | `catalogue.html`, `robots.txt`, `sitemap.xml` — the catalogue for anything that does not run JavaScript. |
 | `curation.toml` | **The only hand-written file.** |
 | `tests/queries.toml` | Known question/answer pairs; the build fails if ranking regresses. |
 | `SCHEMA.md` | The `index.json` contract. |
@@ -114,4 +116,6 @@ aborts publishing if either the plugin or the patch count drops by more than
 - [x] Patches — indexed as files, in their own tab
 - [x] `knowledge-base.md` and `llms.txt` for LLM assistants
 - [x] Optional AI ranking in the page, with the user's own key
+- [x] Generated `catalogue.html`, `robots.txt` and `sitemap.xml` so the
+      catalogue is readable and indexable without JavaScript
 - [ ] On-device search in the AppStore plugin

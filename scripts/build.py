@@ -22,6 +22,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent))
 
 import extract  # noqa: E402
 import knowledge_base  # noqa: E402
+import seo  # noqa: E402
 from github import Client, fetch_url  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -509,6 +510,17 @@ def main():
         encoding="utf-8")
     kb_size = len(kb.encode("utf-8"))
 
+    # The fourth consumer: anything that reads the web without running the
+    # page's JavaScript. The search page renders every result in script, so the
+    # HTML a crawler downloads says "Loading…" and nothing else; this is the
+    # same catalogue as flat HTML, plus the two files that tell a crawler what
+    # to fetch and what to leave alone.
+    catalogue = seo.render_catalogue(index, patches, PAGES_BASE, SOURCE_REPO, APPSTORE_URL)
+    (out_dir / "catalogue.html").write_text(catalogue, encoding="utf-8")
+    (out_dir / "robots.txt").write_text(seo.render_robots(PAGES_BASE), encoding="utf-8")
+    (out_dir / "sitemap.xml").write_text(seo.render_sitemap(PAGES_BASE, started), encoding="utf-8")
+    catalogue_size = len(catalogue.encode("utf-8"))
+
     # Plugins only, and tier C left out: on e-ink the long tail is unreachable
     # noise, and it is a third of the file.
     device_entries = [minimal_entry(e) for e in plugins if e["tier"] != "C"]
@@ -542,6 +554,7 @@ def main():
     print(f"    tiers   " + "  ".join(f"{k}:{v}" for k, v in sorted(ptiers.items())))
     print(f"    no doc  {no_header}")
     print(f"  knowledge-base.md ({kb_size/1024:.0f} KB)  llms.txt")
+    print(f"  catalogue.html    ({catalogue_size/1024:.0f} KB)  robots.txt  sitemap.xml")
     print(f"  index.min.json    ({min_size/1024:.0f} KB, {len(device_entries)} entries)")
     print(f"  requests  {client.requests}  (rate limit left: {client.remaining})")
     return 0
