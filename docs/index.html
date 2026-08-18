@@ -883,7 +883,7 @@ function explain(entry, tokens) {
 // megabyte, and most searches are answered without it.
 const state = { index: null, tab: "plugins", query: "", category: null, showC: false,
                 readmes: null, aiUseFilter: true, sort: "match",
-                answer: null, sharedHash: null };
+                answer: null, sharedHash: null, fromLink: false };
 
 // A repository date, not a plugin one: a plugin that moved out of a monorepo
 // dates from the move, and one whose author renamed the repo keeps the old
@@ -2136,12 +2136,20 @@ async function boot() {
         c.setAttribute("aria-pressed", String(c.dataset.id === state.category)));
     }
   }
-  if (params.get("ai") === "1") $("askAi").click();
-
   // Both shared forms live in the fragment rather than the query string: it is
   // never sent to the server, so a shared answer is not something this site's
   // host gets to read, and neither link can be logged by anything in between.
   const hash = location.hash || "";
+  // Someone opening a link a friend sent them has not asked to configure a
+  // provider, and a page that greets them with an API key field reads as a
+  // signup wall. Set before the first dialog opens, cleared when boot is done,
+  // so choosing AI Mode by hand still offers the settings the way it always
+  // has -- and pressing Ask without a key still opens them, which is the
+  // moment the question is actually being asked.
+  state.fromLink = hash.startsWith("#s=") || hash.startsWith("#ask=");
+
+  if (params.get("ai") === "1") $("askAi").click();
+
   if (hash.startsWith("#ask=")) {
     state.sharedHash = hash;
     $("askAi").click();
@@ -2166,6 +2174,7 @@ async function boot() {
     }
   }
 
+  state.fromLink = false;
   $("clear").hidden = !state.query;
   render();
 }
@@ -2237,7 +2246,7 @@ function setupAI() {
     // Whatever is in the filter box is a reasonable starting point, but only
     // as a seed -- from here on the two inputs are independent.
     if (!$("aiQuestion").value && state.query.trim()) $("aiQuestion").value = state.query.trim();
-    if (!aiConfig()) $("aiPanel").hidden = false;
+    if (!aiConfig() && !state.fromLink) $("aiPanel").hidden = false;
 
     // Shown only before a first answer: once there are results on screen the
     // reader has what they came for, and a standing offer to leave is noise.
