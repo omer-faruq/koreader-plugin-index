@@ -47,9 +47,21 @@ a { color: var(--accent); }
 h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
 /* The offset clears the sticky bar. Without it a jump from the contents list
    lands the heading underneath it, which reads as the wrong section. */
-h2 {
-  font-size: 1.15rem; margin: 34px 0 4px; padding-top: 14px;
-  border-top: 1px solid var(--border); scroll-margin-top: 78px;
+/* The section rule and spacing moved to <details>, which now carries the
+   section. A heading with its own top border inside a <summary> draws the line
+   through the fold arrow rather than above it. */
+details { border-top: 1px solid var(--border); margin-top: 34px; padding-top: 14px; }
+details > summary { cursor: pointer; margin-bottom: 4px; }
+details > summary:hover h2 { color: var(--accent); }
+h2 { display: inline; font-size: 1.15rem; margin: 0; scroll-margin-top: 78px; }
+.toc-head { font-size: .9rem; color: var(--muted); margin: 12px 0 0; }
+/* Said out loud rather than left to be discovered. The taxonomy is the weakest
+   thing on this page, and a label admitting it is worth more than a heading
+   that quietly overstates what a keyword rule knows. */
+.exp {
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .06em;
+  border: 1px solid var(--border); border-radius: 999px;
+  padding: 1px 7px; color: var(--muted); white-space: nowrap;
 }
 .count { color: var(--muted); font-weight: 400; font-size: .85rem; }
 h3 { font-size: 1rem; margin: 0 0 2px; }
@@ -250,10 +262,15 @@ def render_catalogue(index, patches, base, source, appstore):
     for cid in order:
         entries = "\n".join(_entry_html(e, labels) for e in grouped[cid])
         count = len(grouped[cid])
+        # Open by default, deliberately. A fold is a convenience for a reader
+        # working through several hundred entries; a page whose whole purpose
+        # is to be readable without JavaScript must not start by hiding its
+        # contents from whatever is reading it.
         sections.append(
-            f'<section>\n<h2 id="{_esc(cid)}">{_esc(labels.get(cid, cid))} '
-            f'<span class="count">{count} plugin{"" if count == 1 else "s"}</span></h2>\n'
-            f'{entries}\n</section>'
+            f'<section>\n<details open>\n'
+            f'<summary><h2 id="{_esc(cid)}">{_esc(labels.get(cid, cid))} '
+            f'<span class="count">{count} plugin{"" if count == 1 else "s"}</span></h2></summary>\n'
+            f'{entries}\n</details>\n</section>'
         )
 
     if shown_patches:
@@ -264,12 +281,13 @@ def render_catalogue(index, patches, base, source, appstore):
                     f'<a href="./?tab=patches">patches tab</a>.</p>')
         items = "\n".join(_patch_html(p, labels) for p in shown_patches)
         sections.append(
-            '<section>\n<h2 id="patches">User patches '
-            f'<span class="count">{len(shown_patches)} of {index["counts"]["patches"]} indexed</span></h2>\n'
+            '<section>\n<details open>\n'
+            '<summary><h2 id="patches">User patches '
+            f'<span class="count">{len(shown_patches)} of {index["counts"]["patches"]} indexed</span></h2></summary>\n'
             '<p>A patch changes KOReader\'s own behaviour rather than adding a plugin, '
             'and one written for an older release can break after an update. Listed here '
             'are the ones whose file header documents what they do.</p>\n'
-            f'{more}<ul class="patches">\n{items}\n</ul>\n</section>'
+            f'{more}<ul class="patches">\n{items}\n</ul>\n</details>\n</section>'
         )
 
     description = (
@@ -324,6 +342,12 @@ def render_catalogue(index, patches, base, source, appstore):
     still browsable in the <a href="./">finder</a>.</p>
   <p>Descriptions are extracted from each repository's own README by rule. No model
     writes them, and no entry here is an endorsement — every one carries its status.</p>
+  <p class="toc-head">Categories
+    <span class="exp" title="Assigned by keyword rules, not by a person">experimental</span>
+    — each plugin is filed under the one heading that describes it best. The rules
+    read a README for the words a category is about, so a plugin can sit under a
+    heading you would have chosen differently. The <a href="./">finder</a> searches
+    every category at once.</p>
   <ul class="toc">{toc}</ul>
 </div>
 

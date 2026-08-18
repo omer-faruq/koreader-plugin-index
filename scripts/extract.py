@@ -293,24 +293,29 @@ CATEGORY_LABELS = {
 # category at all, note-taking had none, and compound names like
 # "filebrowser" (270 stars) missed a rule written as the bare word "file".
 CATEGORY_RULES = {
-    "sync": ["sync", "synchron", "syncthing", "highlight", "annotation",
-             "bookmark", "webdav", "dropbox", "nextcloud", "onedrive",
-             "progress sync", "backup", "restore", "cloud sync"],
-    "ui": ["ui", "theme", "interface", "homescreen", "home screen", "menu",
-           "menus", "overlay", "icon", "font", "fonts", "layout", "skin",
-           "minimal", "statusbar", "status bar", "screensaver", "cover",
-           "covers", "clock", "shortcut", "shortcuts", "toolbar", "widget",
-           "keyboard", "launcher", "button", "redesign", "customize",
-           "customise", "customization", "customisation", "dark mode",
-           "homepage", "home page", "page turn", "animation"],
+    # Without "highlight", "annotation" and "bookmark", which describe what is
+    # being moved and not the moving. They put 63 plugins that merely show or
+    # export a highlight into the sync bucket, and the genuine synchronisers
+    # all say sync, webdav or a provider name anyway.
+    "sync": ["sync", "synchron", "syncthing", "webdav", "dropbox", "nextcloud",
+             "onedrive", "progress sync", "backup", "restore", "cloud sync"],
+    # "menu", "button" and "customizable" are gone: every plugin adds a menu
+    # entry and says it is customisable, so they described the surface any
+    # plugin touches rather than one that is about the interface.
+    "ui": ["ui", "theme", "interface", "homescreen", "home screen", "overlay",
+           "icon", "font", "fonts", "layout", "skin", "minimal", "statusbar",
+           "status bar", "screensaver", "cover", "covers", "clock", "shortcut",
+           "shortcuts", "toolbar", "tabbar", "tab bar", "widget", "keyboard",
+           "launcher", "redesign", "dark mode", "homepage", "home page",
+           "page turn", "animation"],
     "dict": ["dictionary", "dictionaries", "translate", "translation", "anki",
              "vocabulary", "language", "flashcard", "flashcards", "stardict",
              "wordwise", "glossary", "lookup", "look up", "wordreference",
              "pinyin", "ime", "thesaurus", "definition", "define", "spelling",
              "grammar", "furigana", "jisho"],
     "web": ["web", "browser", "rss", "feed", "feeds", "article", "articles",
-            "readeck", "wallabag", "pocket", "news", "http", "url", "internet",
-            "readability", "bookmarks", "karakeep", "linkding"],
+            "readeck", "wallabag", "pocket", "news", "readability",
+            "karakeep", "linkding"],
     "library": ["opds", "calibre", "catalog", "catalogue", "zotero", "library",
                 "shelf", "shelves", "bookshelf", "metadata", "isbn",
                 "goodreads", "audiobookshelf", "collection", "collections",
@@ -318,28 +323,38 @@ CATEGORY_RULES = {
     "ai": ["ai", "llm", "gpt", "chatgpt", "claude", "gemini", "deepseek",
            "ollama", "assistant", "summar", "openai", "anthropic"],
     "device": ["kobo", "kindle", "remarkable", "pocketbook", "boox", "stylus",
-               "frontlight", "battery", "screenlock", "screenlockpin",
+               "gamepad", "frontlight", "battery", "screenlock", "screenlockpin",
                "screen lock", "pin", "pin code", "wifi", "bluetooth", "usb",
                "sleep", "airplane", "airplanemode", "hardware"],
+    # Verbs of moving data -- download, upload, share, send -- are what every
+    # plugin with a network connection does. What identifies this category is
+    # the file itself and the protocol carrying it.
     "files": ["file", "files", "filebrowser", "file browser", "filemanager",
-              "file manager", "transfer", "localsend", "ftp", "sftp", "smb",
-              "samba", "share", "send", "receive", "cloud", "storage",
-              "import", "export", "upload", "download"],
+              "file manager", "transfer", "wifi transfer", "sideload",
+              "localsend", "ftp", "sftp", "smb", "samba", "cloud", "storage"],
+    # "track", "convert", "image" and "plan" are generic verbs and nouns that
+    # matched a third of the catalogue. Comic panels and illustrations moved to
+    # `content`, which is where the plugins reading them belong.
     "reading": ["statistic", "statistics", "stats", "progress", "reading time",
                 "typography", "pagination", "tts", "text to speech", "speed",
                 "goal", "goals", "xray", "x-ray", "character", "characters",
-                "timeline", "unit conversion", "session", "streak", "unit",
-                "units", "convert", "conversion", "habit", "tracking", "track",
+                "timeline", "unit conversion", "session", "streak", "habit",
                 "hardcover", "storygraph", "animation", "page turn",
-                "page-turn", "panel", "illustration", "illustrations", "image",
-                "images", "planner", "plan", "schedule", "tbr"],
-    "content": ["manga", "comic", "comics", "novel", "novels", "legado",
+                "page-turn", "planner", "tbr"],
+    "content": ["manga", "comic", "comics", "panel", "illustration",
+                "illustrations", "novel", "novels", "legado",
                 "zlibrary", "z-library", "webnovel", "fanfic", "fanfiction",
                 "podcast", "audiobook", "audiobooks", "ao3",
                 "archive of our own", "weread", "fanqie", "scanlation"],
+    # The vocabulary `sync` used to hold. A bookmark ribbon and a highlight
+    # exporter are about the marks a reader leaves in a book, which is this
+    # category and not the transport that may or may not carry them.
     "notes": ["note", "notes", "notebook", "note-taking", "notetaking",
               "handwritten", "handwriting", "memo", "journal", "scribble",
-              "annotate", "annotations", "highlights", "margin"],
+              "annotate", "annotation", "annotations", "highlight",
+              "highlights", "highlighted", "bookmark", "bookmarks", "dogear",
+              "dog ear", "dog-ear", "clipping", "clippings", "clipboard",
+              "excerpt", "margin"],
     "games": ["game", "games", "puzzle", "puzzles", "sudoku", "solitaire",
               "chess", "wordsearch", "word search", "crossword", "minesweeper",
               "tetris", "arcade", "trivia", "quiz"],
@@ -367,6 +382,21 @@ CATEGORY_PATTERNS = {cid: _compile_rules(ns) for cid, ns in CATEGORY_RULES.items
 # claim of identity rather than a compatibility note.
 IDENTITY_CATEGORIES = {"device"}
 
+# Most identifying first. `categories[0]` is where a plugin is filed -- the
+# catalogue's section heading, the first badge on its card -- and until now
+# that was decided by the order the rules happened to be declared in. `sync`
+# was declared first and `notes` eleventh, so every plugin that both syncs and
+# annotates filed as sync: the catalogue printed 104 plugins under Sync and 8
+# under Notes, with icon changers and an art gallery among the synchronisers.
+#
+# The order is by how much the label claims. "AI" or "Games" says what a plugin
+# *is*; "Interface" and "Files" describe a surface most plugins touch on their
+# way to doing something else, so they file a plugin only when nothing more
+# specific applies. Fixed rather than computed from the nightly counts, so a
+# plugin does not change section because two categories swapped sizes.
+PRIMARY_ORDER = ("ai", "games", "content", "dict", "library", "sync", "notes",
+                 "web", "device", "reading", "files", "ui", "misc")
+
 
 def categorise(text_pool, topics, name=""):
     """Rule-based, multi-label. `misc` only when nothing matched.
@@ -387,6 +417,8 @@ def categorise(text_pool, topics, name=""):
         cid for cid, pattern in CATEGORY_PATTERNS.items()
         if pattern.search(identity if cid in IDENTITY_CATEGORIES else broad)
     ]
+    found.sort(key=lambda cid: PRIMARY_ORDER.index(cid)
+               if cid in PRIMARY_ORDER else len(PRIMARY_ORDER))
     return found or ["misc"]
 
 
