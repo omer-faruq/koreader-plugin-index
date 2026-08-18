@@ -1578,6 +1578,23 @@ function renderShared(payload) {
   bindShare();
 }
 
+// The fragment is already spent carrying the answer, so there is no anchor
+// left to jump to -- and a jump would land the reader past the line saying
+// whose answer this is. Nudged from script instead, only when the answer
+// really does start below the fold: on a screen where it already fits,
+// scrolling would push the page's own name out of view, which is the one thing
+// telling a visitor arriving from someone else's link where they have landed.
+function revealAnswer() {
+  const box = $("aiOut");
+  if (!box || !box.getBoundingClientRect || !window.scrollTo) return;
+  const top = box.getBoundingClientRect().top;
+  if (!(top > window.innerHeight * 0.6)) return;
+  const still = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // Short of the top: the question the answer belongs to stays on screen, and
+  // the gap above says there is more up there.
+  window.scrollTo({ top: top + window.scrollY - 90, behavior: still ? "auto" : "smooth" });
+}
+
 function bindShare() {
   const button = $("shareOpen");
   if (button) button.addEventListener("click", openShare);
@@ -2162,6 +2179,10 @@ async function boot() {
       if (payload.t === "p") await switchTab("patches");
       $("askAi").click();
       renderShared(payload);
+      // After a frame, so the measurement is of the laid-out page rather than
+      // of the cards that have just been written into it.
+      if (window.requestAnimationFrame) window.requestAnimationFrame(revealAnswer);
+      else revealAnswer();
     } else {
       // A truncated link is the likeliest failure -- chat clients wrap long
       // URLs -- and it must not look like a broken site.
