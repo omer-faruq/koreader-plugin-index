@@ -915,7 +915,6 @@ const isPatch = entry => Boolean(entry.path);
 // Set during boot. AI Mode needs to be able to move to the other catalogue
 // when nothing here fits, and switchTab lives in boot's scope.
 let switchTabRef = null;
-const cssId = id => id.replace(/[^a-zA-Z0-9]/g, "_");
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
@@ -1717,8 +1716,14 @@ function card(entry, tokens) {
       ${patch ? `<a href="${esc(entry.raw_url)}" target="_blank" rel="noopener">Raw .lua</a>` : ""}
       ${entry.detail ? `<a href="#" data-readme="${esc(entry.id)}">README</a>` : ""}
     </div>
-    <div class="readme" id="rm-${esc(cssId(entry.id))}" hidden></div>
+    <div class="readme" hidden></div>
   </article>`;
+}
+
+// "a and b", "a, b and c" -- read out the way a person would say them.
+function listOf(names) {
+  if (names.length < 2) return names.join("");
+  return names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
 }
 
 /* Distinctions are the part of the catalogue a README cannot produce. They are
@@ -1728,10 +1733,23 @@ function noteFor(shown, tokens) {
   // the listing leads with the curated set, so every pair was on screen at
   // once and all four notes fired before the reader had asked anything.
   if (!tokens.length) return "";
-  const ids = new Set(shown.slice(0, 8).map(e => e.id));
+  const here = shown.slice(0, 8);
+  const ids = new Set(here.map(e => e.id));
+  const nameOf = id => {
+    const e = here.find(x => x.id === id);
+    return e ? (isPatch(e) ? e.path : e.repo) : id.split("/").pop();
+  };
   return (state.index.distinctions || [])
-    .filter(d => (d.between || []).filter(x => ids.has(x)).length >= 2)
-    .map(d => `<div class="note info"><b>Similar, but not the same</b>${esc(d.say)}</div>`)
+    .map(d => [d, (d.between || []).filter(x => ids.has(x))])
+    .filter(([, pair]) => pair.length >= 2)
+    // Named in the heading, always. Several of these notes read as "both of
+    // them do X" without ever saying which two, and stacked under a search
+    // that returned thirty cards they leave the reader looking for a pair
+    // that was never identified. The names are the ones printed on the cards,
+    // and only the entries actually on screen are listed: a note about five
+    // lookalikes should point at the ones the reader is choosing between.
+    .map(([d, pair]) => `<div class="note info"><b>Similar, but not the same: ${
+      esc(listOf(pair.map(nameOf)))}</b>${esc(d.say)}</div>`)
     .join("");
 }
 
@@ -1890,7 +1908,14 @@ function bindReadme(root, entries) {
     link.addEventListener("click", async event => {
       event.preventDefault();
       const entry = byId.get(link.dataset.readme);
-      const panel = $(`rm-${cssId(entry.id)}`);
+      // Found through the card the link sits in, never by a document id. An
+      // entry can be on screen twice at once -- once in the AI answer and once
+      // in the keyword list behind it -- and looking the panel up by id opened
+      // whichever came first in the document, which is the hidden one. The
+      // README appeared to do nothing, silently, for exactly the entries the
+      // model ranked highest, because those are also the ones keyword search
+      // put at the top.
+      const panel = link.closest(".card").querySelector(".readme");
       if (!panel.hidden) { panel.hidden = true; link.textContent = "README"; return; }
 
       link.textContent = "Hide README";
