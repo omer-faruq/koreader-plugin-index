@@ -299,23 +299,24 @@ CATEGORY_RULES = {
     # all say sync, webdav or a provider name anyway.
     "sync": ["sync", "synchron", "syncthing", "webdav", "dropbox", "nextcloud",
              "onedrive", "progress sync", "backup", "restore", "cloud sync"],
-    # "menu", "button" and "customizable" are gone: every plugin adds a menu
-    # entry and says it is customisable, so they described the surface any
-    # plugin touches rather than one that is about the interface.
-    "ui": ["ui", "theme", "interface", "homescreen", "home screen", "overlay",
-           "icon", "font", "fonts", "layout", "skin", "minimal", "statusbar",
-           "status bar", "screensaver", "cover", "covers", "clock", "shortcut",
-           "shortcuts", "toolbar", "tabbar", "tab bar", "widget", "keyboard",
-           "launcher", "redesign", "dark mode", "homepage", "home page",
-           "page turn", "animation"],
+    # Only the marketing adjectives are gone. "Fully customisable" appears in
+    # every other README and claims nothing; "menu" and "button" looked like
+    # the same kind of noise and are not -- dropping them cost a start menu
+    # and an on-screen button bar their only category.
+    "ui": ["ui", "theme", "interface", "homescreen", "home screen", "menu",
+           "menus", "overlay", "icon", "font", "fonts", "layout", "skin",
+           "minimal", "statusbar", "status bar", "screensaver", "cover",
+           "covers", "clock", "shortcut", "shortcuts", "toolbar", "tabbar",
+           "tab bar", "widget", "keyboard", "launcher", "button", "redesign",
+           "dark mode", "homepage", "home page", "page turn", "animation"],
     "dict": ["dictionary", "dictionaries", "translate", "translation", "anki",
              "vocabulary", "language", "flashcard", "flashcards", "stardict",
              "wordwise", "glossary", "lookup", "look up", "wordreference",
              "pinyin", "ime", "thesaurus", "definition", "define", "spelling",
              "grammar", "furigana", "jisho"],
     "web": ["web", "browser", "rss", "feed", "feeds", "article", "articles",
-            "readeck", "wallabag", "pocket", "news", "readability",
-            "karakeep", "linkding"],
+            "readeck", "wallabag", "pocket", "news", "http", "url", "internet",
+            "readability", "bookmarks", "karakeep", "linkding"],
     "library": ["opds", "calibre", "catalog", "catalogue", "zotero", "library",
                 "shelf", "shelves", "bookshelf", "metadata", "isbn",
                 "goodreads", "audiobookshelf", "collection", "collections",
@@ -326,21 +327,23 @@ CATEGORY_RULES = {
                "gamepad", "frontlight", "battery", "screenlock", "screenlockpin",
                "screen lock", "pin", "pin code", "wifi", "bluetooth", "usb",
                "sleep", "airplane", "airplanemode", "hardware"],
-    # Verbs of moving data -- download, upload, share, send -- are what every
-    # plugin with a network connection does. What identifies this category is
-    # the file itself and the protocol carrying it.
     "files": ["file", "files", "filebrowser", "file browser", "filemanager",
               "file manager", "transfer", "wifi transfer", "sideload",
-              "localsend", "ftp", "sftp", "smb", "samba", "cloud", "storage"],
-    # "track", "convert", "image" and "plan" are generic verbs and nouns that
-    # matched a third of the catalogue. Comic panels and illustrations moved to
-    # `content`, which is where the plugins reading them belong.
+              "localsend", "ftp", "sftp", "smb", "samba", "share", "send",
+              "receive", "cloud", "storage", "import", "export", "upload",
+              "download"],
+    # Comic panels and illustrations moved to `content`, where the plugins
+    # reading them belong. Nothing else left: "track", "unit" and "image" look
+    # generic and are load-bearing -- a unit converter, a weight tracker and a
+    # map viewer each had no other category.
     "reading": ["statistic", "statistics", "stats", "progress", "reading time",
                 "typography", "pagination", "tts", "text to speech", "speed",
                 "goal", "goals", "xray", "x-ray", "character", "characters",
-                "timeline", "unit conversion", "session", "streak", "habit",
+                "timeline", "unit conversion", "session", "streak", "unit",
+                "units", "convert", "conversion", "habit", "tracking", "track",
                 "hardcover", "storygraph", "animation", "page turn",
-                "page-turn", "planner", "tbr"],
+                "page-turn", "image", "images", "planner", "plan", "schedule",
+                "tbr"],
     "content": ["manga", "comic", "comics", "panel", "illustration",
                 "illustrations", "novel", "novels", "legado",
                 "zlibrary", "z-library", "webnovel", "fanfic", "fanfiction",
@@ -396,6 +399,15 @@ IDENTITY_CATEGORIES = {"device"}
 # plugin does not change section because two categories swapped sizes.
 PRIMARY_ORDER = ("ai", "games", "content", "dict", "library", "sync", "notes",
                  "web", "device", "reading", "files", "ui", "misc")
+
+# Measured after the first build shipped: ordering was the whole fix. Narrowing
+# the broad rules on top of it looked like the same repair and was not -- it
+# left 33 plugins with no category at all and took `misc` from 20% to 24%,
+# while the sections it was supposed to improve were already flat. A category
+# that describes a surface is harmless once it can only file a plugin that
+# nothing more specific claims, so breadth costs nothing here and coverage is
+# worth keeping. The two cuts that stayed are the ones with a misfiling behind
+# them, not a hunch.
 
 
 def categorise(text_pool, topics, name=""):

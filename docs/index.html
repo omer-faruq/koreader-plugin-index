@@ -799,6 +799,24 @@ function tokenise(text) {
   return out;
 }
 
+// Both stages ask the model for search terms and both get sentences back as
+// often as lists, with "koreader" and "plugin" among the words -- asked for or
+// not. `tokenise` drops those before scoring, so retrieval was never harmed;
+// what was harmed is the model's own budget, spent on words that do nothing,
+// and the line telling the reader what was searched for, which named them.
+function searchTerms(list, limit) {
+  const out = [];
+  for (const item of list) {
+    if (typeof item !== "string") continue;
+    for (const word of words(item)) {
+      if (word.length <= 1 || STOPWORDS.has(word) || out.includes(word)) continue;
+      out.push(word);
+      if (out.length >= limit) return out;
+    }
+  }
+  return out;
+}
+
 function wordset(text) {
   const w = new Set(words(text));
   return { words: w, stems: new Set([...w].map(stem)) };
@@ -992,7 +1010,9 @@ const EXPAND_PROMPT = [
 const RETRY_RULE =
   "If the shortlist plainly does not contain what was asked for, you may also return "
   + "`search_again`: three to eight English words to retrieve a different shortlist with, "
-  + "using the vocabulary you have just seen these entries described in. Ask only when the "
+  + "using the vocabulary you have just seen these entries described in. Separate words, "
+  + "not a sentence, and never 'koreader', 'plugin' or 'ereader' -- every entry has those "
+  + "and they distinguish nothing. Ask only when the "
   + "candidates are the problem -- not to look for a better version of something you have "
   + "already found. Return your picks either way; a second search adds to them.";
 
@@ -1242,7 +1262,7 @@ async function testConnection(cfg) {
 async function expandQuery(cfg, question) {
   try {
     const out = await callModel(cfg, EXPAND_PROMPT, JSON.stringify({ question }));
-    const terms = (out.terms || []).filter(t => typeof t === "string");
+    const terms = searchTerms(out.terms || [], 12);
     const language = typeof out.language === "string" && /^[A-Za-z ]{3,20}$/.test(out.language)
       ? out.language.trim() : null;
     return terms.length || language ? { terms, language } : null;
@@ -1353,9 +1373,7 @@ async function runAI() {
     }
     if (result.note) note = result.note;
 
-    const again = (result.search_again || [])
-      .filter(t => typeof t === "string" && t.trim())
-      .map(t => t.trim()).slice(0, 8);
+    const again = searchTerms(result.search_again || [], 8);
     if (!again.length || roundsLeft <= 0) break;
 
     const next = shortlistFor(again.join(" ") + " " + question)
