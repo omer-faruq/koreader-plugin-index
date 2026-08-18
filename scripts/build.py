@@ -33,6 +33,7 @@ SCHEMA_VERSION = 2
 SOURCE_REPO = "https://github.com/omer-faruq/koreader-plugin-index"
 PUBLISHED_INDEX = "https://omer-faruq.github.io/koreader-plugin-index/index.json"
 READMES_URL = "https://omer-faruq.github.io/koreader-plugin-index/readme-index.json"
+DETAILS_URL = "https://omer-faruq.github.io/koreader-plugin-index/details.json"
 PATCHES_URL = "https://omer-faruq.github.io/koreader-plugin-index/patches.json"
 PAGES_BASE = "https://omer-faruq.github.io/koreader-plugin-index"
 APPSTORE_URL = "https://omer-faruq.github.io/appstore.koplugin/"
@@ -173,6 +174,11 @@ def build_plugin(node, curation):
         "is_fork": node["isFork"],
         "archived": node["isArchived"],
         "pushed_at": node["pushedAt"],
+        # Free: the same query already returns it. What it buys is the one
+        # question the index could not answer -- what is new here -- which for
+        # a catalogue growing by a few plugins a week is most of the reason to
+        # come back to it.
+        "created_at": node.get("createdAt"),
         "license": (node.get("licenseInfo") or {}).get("spdxId"),
         "default_branch": (node.get("defaultBranchRef") or {}).get("name") or "main",
         "has_meta": has_plugin_marker(node),
@@ -413,9 +419,22 @@ def main():
 
     # Deep search reuses whatever the previous run condensed, so a diff run
     # does not lose README text for the repositories it did not touch.
+    # Detail files are carried the same way, and for a sharper reason: the
+    # entries the diff did not touch keep their `detail` path from the previous
+    # index, but the Pages artifact replaces the whole site. Writing only the
+    # freshly built ones published a catalogue where every plugin untouched
+    # that night answered its README link with a 404 -- which, between two
+    # monthly full builds, is nearly all of them. One fetch restores the lot;
+    # asking the published site for 750 individual files would not.
     if args.mode == "diff":
         previous_readmes = fetch_url(READMES_URL) or {}
         readmes.update(previous_readmes.get("readmes", {}))
+        previous_details = fetch_url(DETAILS_URL)
+        if previous_details:
+            details.update(previous_details.get("details", {}))
+        else:
+            print("  no published details.json: README excerpts will be thin "
+                  "until the next full build")
 
     # Carry forward everything the diff did not touch. Untouched entries keep
     # their previously extracted fields; only curation is re-applied, so a
@@ -434,6 +453,10 @@ def main():
         entries[entry["id"]] = entry
         if detail:
             details[entry["id"]] = detail
+        else:
+            # Rebuilt and found to have no README any more. Without this the
+            # carried-over excerpt would outlive the document it came from.
+            details.pop(entry["id"], None)
         if condensed:
             readmes[entry["id"]] = condensed
 
@@ -532,9 +555,17 @@ def main():
         "plugins": device_entries,
     })
 
-    for detail in details.values():
+    # Per file for the page, which fetches one when a README is expanded, and
+    # once as a whole for the next diff run, which cannot fetch 750 of them.
+    live_details = {pid: d for pid, d in details.items() if pid in entries}
+    for detail in live_details.values():
         owner, repo = detail["id"].split("/", 1)
         write_json(out_dir / "detail" / f"{owner}__{repo}.json", detail)
+    details_size = write_json(out_dir / "details.json", {
+        "schema": SCHEMA_VERSION,
+        "generated_at": started,
+        "details": live_details,
+    })
 
     tiers = {}
     for entry in plugins:
@@ -545,7 +576,7 @@ def main():
     print(f"  plugins   {len(plugins)}")
     print(f"  tiers     " + "  ".join(f"{k}:{v}" for k, v in sorted(tiers.items())))
     print(f"  misc-only {misc} ({misc*100//max(len(plugins),1)}%)")
-    print(f"  details   {len(details)}")
+    print(f"  details   {len(live_details)} ({details_size/1024:.0f} KB carried as details.json)")
     ptiers = {}
     for entry in patches:
         ptiers[entry["tier"]] = ptiers.get(entry["tier"], 0) + 1

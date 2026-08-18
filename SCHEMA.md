@@ -19,6 +19,7 @@ scripts/build.py  ──►  index.json  ──►  docs/index.html      (search
 | `docs/index.json` | search page | Plugins only. Full entries, no long prose. |
 | `docs/patches.json` | search page, on tab open | Patch entries. Split out in schema 2 — inlined, index.json passed a megabyte. |
 | `docs/detail/<owner>__<repo>.json` | search page, on demand | README-derived long text. |
+| `docs/details.json` | the next build | Every detail document in one file. A diff run carries these over; it cannot fetch 750 separate files. |
 | `docs/readme-index.json` | search page, opt-in | Condensed README text per plugin, for deep search. ~1 MB, lazily loaded. |
 | `docs/index.min.json` | device (Lua) | Reserved for phase 6. Same entry shape, fewer fields. |
 | `docs/knowledge-base.md` | LLM | Generated prose, not consumed by code. |
@@ -80,6 +81,7 @@ The unit is a **repository**.
   "is_fork": false,
   "archived": false,
   "pushed_at": "2026-07-30T11:02:18Z",
+  "created_at": "2025-11-04T09:12:41Z",
   "license": "MIT",
   "default_branch": "main",
 
@@ -172,6 +174,11 @@ can render *why* something is demoted rather than silently hiding it:
 
 `curated`, `has_meta`, `no_meta`, `active`, `dormant`, `archived`, `fork`,
 `documented`, `stub`
+
+`created_at` is the repository's, not the plugin's: a plugin that began life
+inside another repository dates from the move. It is absent on entries a diff
+run carried over from before the field existed, so consumers sort on it only
+where present.
 
 `activity` is derived from `pushed_at` (or `file_modified_at` for patches):
 `active` under 12 months, `dormant` beyond it, `archived` when GitHub says so.

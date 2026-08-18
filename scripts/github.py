@@ -42,6 +42,7 @@ query($q: String!, $after: String) {
         isFork
         isArchived
         pushedAt
+        createdAt
         licenseInfo { spdxId }
         defaultBranchRef { name }
         repositoryTopics(first: 20) { nodes { topic { name } } }
