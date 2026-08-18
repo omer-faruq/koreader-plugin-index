@@ -118,4 +118,6 @@ aborts publishing if either the plugin or the patch count drops by more than
 - [x] Optional AI ranking in the page, with the user's own key
 - [x] Generated `catalogue.html`, `robots.txt` and `sitemap.xml` so the
       catalogue is readable and indexable without JavaScript
+- [x] Creation and update dates, and orders to browse by them
+- [x] An AI answer can be shared as text or as a link that carries it
 - [ ] On-device search in the AppStore plugin

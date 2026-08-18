@@ -274,6 +274,16 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
   font-size: .8rem; line-height: 1.5; }
 .actions .act svg { width: 15px; height: 15px; vertical-align: -2px; margin-right: 4px; }
 
+/* The row had no label, so a first-time reader met a line of unexplained
+   pills. Naming it also creates somewhere to say how it was built: these come
+   from keyword rules, and saying so is cheaper than pretending otherwise. */
+.chips-head { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+.chips-title { font-size: .82rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.exp {
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .06em;
+  border: 1px solid var(--border); border-radius: 999px;
+  padding: 1px 7px; color: var(--muted); cursor: help; white-space: nowrap;
+}
 .chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; }
 .chip {
   border: 1px solid var(--border); background: var(--surface);
@@ -291,6 +301,10 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
   font-size: .85rem; color: var(--muted);
 }
 .toolbar label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.sortwrap select {
+  font: inherit; color: var(--text); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 7px; padding: 2px 6px;
+}
 
 .linkish {
   border: 0; background: transparent; color: var(--accent); cursor: pointer;
@@ -343,8 +357,37 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
   border-radius: 7px; padding: 6px 14px; font-size: .85rem; cursor: pointer; font-weight: 600;
 }
 .btn.ghost { border-color: var(--border); background: transparent; color: var(--muted); font-weight: 400; }
+/* Someone who lands here from a shared link, or by tapping AI Mode first,
+   sees a form demanding an API key and no evidence that anything else is here.
+   The header button is one exit; this is the one that says what is behind it,
+   which is the part that was missing. */
+.ai-escape { font-size: .85rem; color: var(--muted); margin: 14px 0 0; }
+.sheet-wide { max-width: 620px; }
+.share-opts { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 12px; font-size: .85rem; }
+.share-opts label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+#shareText {
+  width: 100%; padding: 12px 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .8rem; line-height: 1.5; color: var(--text); background: var(--bg);
+  border: 1px solid var(--border); border-radius: 10px; resize: vertical;
+}
+.share-link { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
+.share-link .pair-row { border: 1px solid var(--border); border-radius: 8px; }
+#shareUrl {
+  flex: 1; min-width: 0; font-size: .8rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text); background: transparent; border: 0; padding: 2px 0;
+}
+#shareUrl:focus { outline: none; }
+.share-banner { border-left: 3px solid var(--accent); padding: 2px 0 2px 12px; margin-bottom: 16px; }
+.share-banner b { display: block; }
+.share-banner p { margin: 4px 0 0; font-size: .85rem; color: var(--muted); }
+.ai-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.ai-head .section-title { margin-bottom: 0; }
 .ai-result { border-left: 3px solid var(--accent); padding-left: 12px; margin-bottom: 16px; }
 .ai-why { font-size: .85rem; color: var(--muted); margin: 4px 0 0; }
+/* The ranking is the answer to "which one first?", so it is stated rather than
+   left to be inferred from the order. */
+.ai-rank { display: block; font-size: .72rem; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--muted); margin-bottom: 2px; }
 
 .note {
   background: var(--warn-bg); border: 1px solid var(--warn-border);
@@ -379,6 +422,10 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
 .badge.tier-B { color: var(--tier-b); border-color: var(--tier-b); }
 .badge.tier-C { color: var(--tier-c); border-color: var(--tier-c); }
 .badge-settled { color: var(--tier-c); }
+/* The one badge that is an invitation rather than a fact about quality: a
+   catalogue growing by a few plugins a week is worth returning to only if the
+   new ones are findable. */
+.badge-new { color: var(--accent); border-color: var(--accent); font-weight: 600; }
 .why { color: var(--muted); font-size: .8rem; margin-left: auto; }
 .why span { color: var(--accent); }
 
@@ -441,11 +488,22 @@ footer a { color: var(--accent); }
   </button>
 </div>
 
+<div class="chips-head" id="chipsHead" hidden>
+  <span class="chips-title">Categories</span>
+  <span class="exp" title="Assigned by keyword rules read from each README, not by a person. A plugin can sit under a category you would have chosen differently.">experimental</span>
+</div>
 <div class="chips" id="chips"></div>
 
 <div class="toolbar">
   <label><input type="checkbox" id="showC"> Include dormant, forks and stubs</label>
   <label id="deepWrap"><input type="checkbox" id="deepSearch" checked> Search inside READMEs <span id="deepState"></span></label>
+  <label class="sortwrap">Order
+    <select id="sort">
+      <option value="match">best match</option>
+      <option value="updated">recently updated</option>
+      <option value="new" id="sortNew">newest</option>
+    </select>
+  </label>
   <span id="count"></span>
 </div>
 
@@ -499,11 +557,49 @@ footer a { color: var(--accent); }
   </div>
 </div>
 
+<div class="overlay" id="shareModal" hidden>
+  <div class="sheet sheet-wide">
+    <div class="modal-head">
+      <h2>Share this answer</h2>
+      <button class="btn-x" id="shareClose" aria-label="Close">&times;</button>
+    </div>
+
+    <div class="share-opts" id="shareOpts">
+      <label><input type="checkbox" data-share="why" checked> Reasons for each pick</label>
+      <label><input type="checkbox" data-share="fit" checked> Fit scores</label>
+      <label><input type="checkbox" data-share="note" checked> The model&#39;s note</label>
+      <label><input type="checkbox" data-share="warnings" checked> Similar-but-different warnings</label>
+      <label><input type="checkbox" data-share="model" checked> Which model answered</label>
+      <label><input type="checkbox" data-share="link" checked> A link back</label>
+    </div>
+
+    <textarea id="shareText" rows="12" readonly aria-label="Text to copy"></textarea>
+    <div class="modal-actions">
+      <button class="btn" id="shareCopy">Copy text</button>
+      <span class="kbd-hint" id="shareSize"></span>
+    </div>
+
+    <div class="share-link">
+      <p class="field-hint">The link in the text asks the same question, so whoever
+        opens it runs it with their own key. This one carries the answer itself —
+        the picks and reasons below, shown without a key and without reaching any
+        provider.</p>
+      <div class="pair-row">
+        <input id="shareUrl" type="text" readonly aria-label="Link to this answer">
+        <button class="icon-btn" id="shareUrlCopy" title="Copy link">&#10697;</button>
+      </div>
+    </div>
+
+    <p class="sheet-foot">Nothing is uploaded. Both links carry their content in
+      the address itself, which is also why the second one is long.</p>
+  </div>
+</div>
+
 <div id="aiView" hidden>
   <div class="modal-card">
     <div class="modal-head">
       <h2 id="aiHeading">Describe what you need</h2>
-      <button class="linkish" id="aiClose">← Back to browsing</button>
+      <button class="btn ghost" id="aiClose">← Back to browsing</button>
     </div>
 
     <textarea id="aiQuestion" rows="4"
@@ -594,9 +690,20 @@ footer a { color: var(--accent); }
             on their opening slogan rather than what they do.</span>
         </div>
 
+        <div class="tune-row">
+          <label for="tuneRetries">Second looks the model may ask for</label>
+          <input id="tuneRetries" type="number" min="0" max="2" step="1">
+          <button class="icon-btn" data-reset="retries" title="Back to 1">↺</button>
+          <span class="field-hint">Retrieval picks the candidates before the model
+            has seen any of them. Having read them, it can ask to search again in
+            the catalogue's own words — and only then does this cost anything.</span>
+        </div>
+
         <p class="field-hint" id="tuneCost"></p>
       </div>
     </div>
+
+    <p class="ai-escape" id="aiEscape" hidden></p>
 
     <div id="aiOut"></div>
   </div>
@@ -757,7 +864,34 @@ function explain(entry, tokens) {
 // `readmes` stays null until the deep-search box is ticked. It is roughly a
 // megabyte, and most searches are answered without it.
 const state = { index: null, tab: "plugins", query: "", category: null, showC: false,
-                readmes: null, aiUseFilter: true };
+                readmes: null, aiUseFilter: true, sort: "match",
+                answer: null, sharedHash: null };
+
+// A repository date, not a plugin one: a plugin that moved out of a monorepo
+// dates from the move, and one whose author renamed the repo keeps the old
+// date. Close enough to answer "what is new here", which nothing else could.
+const updatedOf = e => e.file_modified_at || e.repo_pushed_at || e.pushed_at || "";
+const createdOf = e => e.created_at || "";
+
+// Recent dates are read as durations and old ones as calendar positions:
+// "4 days ago" is what makes a plugin feel current, while "March 2024" is what
+// makes one feel finished. Neither reads well in the other's range.
+function whenLabel(iso) {
+  if (!iso) return "";
+  const then = new Date(iso);
+  if (isNaN(then)) return "";
+  const days = Math.floor((Date.now() - then) / 86400000);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 30) return `${days} days ago`;
+  return then.toLocaleDateString(undefined, { year: "numeric", month: "short" });
+}
+
+const NEW_DAYS = 60;
+const isNew = e => {
+  const iso = createdOf(e);
+  return Boolean(iso) && (Date.now() - new Date(iso)) < NEW_DAYS * 86400000;
+};
 
 const isPatch = entry => Boolean(entry.path);
 // Set during boot. AI Mode needs to be able to move to the other catalogue
@@ -808,11 +942,18 @@ const PROVIDERS = {
 //
 // Results returned is different: wanting only the single best answer is a
 // preference about reading, not a way to get worse ones, so it opens both ways.
-const TUNING_DEFAULTS = { shortlist: 40, picks: 4, chars: 1080 };
+//
+// `retries` is the fourth, and the only one that costs nothing unless it is
+// used: the model asks for another search or it does not. One is enough for
+// the case it exists for -- retrieval sent the wrong forty -- and a hard
+// ceiling of two keeps a model that likes the escape hatch from spending a
+// key on it.
+const TUNING_DEFAULTS = { shortlist: 40, picks: 4, chars: 1080, retries: 1 };
 const TUNING_RANGE = {
   shortlist: [TUNING_DEFAULTS.shortlist, 120],
   picks: [1, 12],
-  chars: [TUNING_DEFAULTS.chars, 4000]
+  chars: [TUNING_DEFAULTS.chars, 4000],
+  retries: [0, 2]
 };
 
 function tuning() {
@@ -848,6 +989,18 @@ const EXPAND_PROMPT = [
   'JSON only: {"terms":["..."],"language":"English"}'
 ].join(" ");
 
+const RETRY_RULE =
+  "If the shortlist plainly does not contain what was asked for, you may also return "
+  + "`search_again`: three to eight English words to retrieve a different shortlist with, "
+  + "using the vocabulary you have just seen these entries described in. Ask only when the "
+  + "candidates are the problem -- not to look for a better version of something you have "
+  + "already found. Return your picks either way; a second search adds to them.";
+
+const RETRY_FOLLOWUP =
+  "This is another shortlist, retrieved with the words you asked for. The entries you "
+  + "already chose are in `already_found` and are kept. Add only candidates that beat them "
+  + "or answer a part of the question they miss, and score every pick on the same scale.";
+
 const PATCH_RULES = [
   "These are user patches, not plugins: each edits KOReader's own behaviour and",
   "can break when KOReader updates. Say what a patch does, and prefer the ones",
@@ -857,11 +1010,25 @@ const PATCH_RULES = [
 const SYSTEM_PROMPT = [
   "You help people find KOReader plugins.",
   "You are given a question and a shortlist of candidates, each with its stated purpose.",
-  "Choose only the ones that genuinely solve the stated problem, at most {PICKS}, best first.",
+  "Choose only the ones that genuinely solve the stated problem, at most {PICKS}.",
+  // "Best first" alone was not enough: models routinely echoed the order the
+  // shortlist arrived in, so the reader could not tell the strongest answer
+  // from the fourth one. A number per pick is checkable, and the page sorts on
+  // it rather than trusting the sequence.
+  "Give each pick a `fit` from 0 to 100: how completely it solves the problem asked about,",
+  "not how popular or well made it is. Use the range -- an exact answer is near 100,",
+  "a partial or adjacent one well below 60. Do not give two picks the same number.",
   "A candidate matching on a word is not the same as it doing the job: a plugin that",
   "answers questions about highlighted text does not synchronise highlights between devices.",
   "Never name anything outside the shortlist. Never claim a capability the purpose does not state.",
   "If nothing fits, return an empty list.",
+  // The shortlist was chosen by keyword matching, before anything had read the
+  // question properly -- so the commonest failure is not bad judgement here but
+  // forty wrong candidates arriving. Having read their purposes, the model
+  // knows the words this catalogue actually uses and can ask for a shortlist
+  // drawn in them. Offered only while a round remains, and worded so it is an
+  // escape from a bad list rather than a free second opinion.
+  "{RETRY}",
   // Named outright rather than left to the model to work out. "Reply in the
   // same language as the question" put the detection inside a long prompt and
   // lost to a model's own default -- DeepSeek answered English questions in
@@ -869,7 +1036,8 @@ const SYSTEM_PROMPT = [
   // this instruction gets a concrete language.
   "Write every reason in {LANGUAGE}. This is not negotiable, whatever language",
   "the plugin descriptions are written in.",
-  'Reply with JSON only: {"picks":[{"id":"owner/repo","why":"one short sentence"}],"note":"optional one sentence"}'
+  'Reply with JSON only: {"picks":[{"id":"owner/repo","fit":88,"why":"one short sentence"}],'
+  + '"search_again":["term"],"note":"optional one sentence"}'
 ].join(" ");
 
 const SHORTLIST_FLOOR = 10;
@@ -1098,47 +1266,113 @@ async function runAI() {
   // Retrieval runs on the question, not on whatever is in the filter box. The
   // two are independent inputs and writing a paragraph must not disturb the
   // list behind the dialog.
+  // Asking a question of one's own replaces whatever was shared, so the link
+  // that carried it stops describing what is on screen.
+  state.sharedHash = null;
+  $("aiEscape").hidden = true;
   $("aiOut").innerHTML = `<div class="state">Reading the question…</div>`;
   const expanded = await expandQuery(cfg, question);
   const terms = expanded && expanded.terms.length ? expanded.terms : null;
   const language = (expanded && expanded.language) || "the language of the question";
   const retrievalQuery = terms ? terms.join(" ") + " " + question : question;
 
-  const candidates = shortlistFor(retrievalQuery);
+  let candidates = shortlistFor(retrievalQuery);
   if (!candidates.length) {
     $("aiOut").innerHTML = `<div class="note info"><b>Nothing to work with</b>
       The catalogue came back empty. Reload the page and try again.</div>`;
     return;
   }
 
-  $("aiOut").innerHTML = `<div class="state">Weighing ${candidates.length} candidates…</div>`;
+  // Every candidate the model has seen, across every round -- picks are
+  // validated against this, so a second round cannot invalidate a first-round
+  // choice by replacing the shortlist under it.
+  const byId = new Map();
+  const merged = new Map();
+  const searchedAgainFor = [];
+  const budget = tuning().retries;
+  // Counted after a call returns, not before it goes out. A round that failed
+  // retrieved candidates the model never saw, and reporting them as weighed
+  // would overstate what the answer rests on.
+  let result = null, note = "", weighed = 0;
 
-  const relevant = (state.index.distinctions || []).filter(d =>
-    (d.between || []).filter(x => candidates.some(c => c.id === x)).length >= 2);
+  for (let round = 0; ; round++) {
+    candidates.forEach(e => byId.set(e.id, e));
+    $("aiOut").innerHTML = `<div class="state">${round
+      ? `Looking again — weighing ${candidates.length} more candidates…`
+      : `Weighing ${candidates.length} candidates…`}</div>`;
 
-  let result;
-  try {
-    const base = SYSTEM_PROMPT
-      .replace("{PICKS}", String(tuning().picks))
-      .replace("{LANGUAGE}", language);
-    const system = state.tab === "patches" ? base + " " + PATCH_RULES : base;
-    result = await callModel(cfg, system, JSON.stringify({
-      question,
-      looking_for: state.tab === "patches" ? "user patches" : "plugins",
-      candidates: candidates.map(compact),
-      known_confusions: relevant.map(d => ({ between: d.between, note: d.say }))
-    }));
-  } catch (err) {
-    // Same diagnosis as the settings test, so a failure reads the same way
-    // wherever it surfaces.
-    const [what, detail] = describeFailure(err);
-    $("aiOut").innerHTML =
-      `<div class="note"><b>${esc(what)}</b>${esc(detail)}</div>`;
-    return;
+    const relevant = (state.index.distinctions || []).filter(d =>
+      (d.between || []).filter(x => byId.has(x)).length >= 2);
+    const roundsLeft = budget - round;
+
+    try {
+      const base = SYSTEM_PROMPT
+        .replace("{PICKS}", String(tuning().picks))
+        .replace("{LANGUAGE}", language)
+        // Withdrawn once the budget is spent. Left in, a model asks for a
+        // search that will not happen and words its answer as provisional.
+        .replace("{RETRY}", roundsLeft > 0 ? RETRY_RULE : "");
+      let system = state.tab === "patches" ? base + " " + PATCH_RULES : base;
+      if (round) system += " " + RETRY_FOLLOWUP;
+      result = await callModel(cfg, system, JSON.stringify({
+        question,
+        looking_for: state.tab === "patches" ? "user patches" : "plugins",
+        candidates: candidates.map(compact),
+        ...(merged.size ? { already_found: [...merged.values()]
+          .map(p => ({ id: p.id, fit: p.score, why: p.why })) } : {}),
+        known_confusions: relevant.map(d => ({ between: d.between, note: d.say }))
+      }));
+    } catch (err) {
+      // A failed second round keeps the first round's answer: it is a better
+      // outcome than replacing results the reader can already see with an
+      // error about a search they never asked for.
+      if (merged.size) { searchedAgainFor.pop(); break; }
+      // Same diagnosis as the settings test, so a failure reads the same way
+      // wherever it surfaces.
+      const [what, detail] = describeFailure(err);
+      $("aiOut").innerHTML =
+        `<div class="note"><b>${esc(what)}</b>${esc(detail)}</div>`;
+      return;
+    }
+
+    weighed += candidates.length;
+
+    for (const p of result.picks || []) {
+      if (!byId.has(p.id)) continue;
+      const score = Number.isFinite(+p.fit) ? +p.fit : null;
+      const seq = merged.size;
+      const kept = merged.get(p.id);
+      // Rescored across rounds: the later score is the one given with more of
+      // the catalogue in view, but a pick never loses its place by being
+      // re-examined and scored null.
+      if (!kept || (score != null && (kept.score == null || score > kept.score))) {
+        merged.set(p.id, { id: p.id, why: p.why || (kept && kept.why) || "",
+                           score: score ?? (kept ? kept.score : null),
+                           seq: kept ? kept.seq : seq });
+      }
+    }
+    if (result.note) note = result.note;
+
+    const again = (result.search_again || [])
+      .filter(t => typeof t === "string" && t.trim())
+      .map(t => t.trim()).slice(0, 8);
+    if (!again.length || roundsLeft <= 0) break;
+
+    const next = shortlistFor(again.join(" ") + " " + question)
+      .filter(e => !byId.has(e.id));
+    // Nothing new to show it. Asking the same question of the same entries
+    // would spend a request to receive the same answer.
+    if (!next.length) break;
+    searchedAgainFor.push(again);
+    candidates = next;
   }
 
-  const byId = new Map(candidates.map(e => [e.id, e]));
-  const picks = (result.picks || []).filter(p => byId.has(p.id));
+  // Sorted here rather than taken as given. A model that ignores `fit` or
+  // returns the same number for everything falls back to the order it replied
+  // in, which is what this used to trust unconditionally.
+  const picks = [...merged.values()]
+    .sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || a.seq - b.seq)
+    .slice(0, tuning().picks);
   if (!picks.length) {
     // The one moment switching catalogues is the right suggestion. A permanent
     // tab switcher in here would let a question written about plugins be
@@ -1149,7 +1383,10 @@ async function runAI() {
       || (state.index.counts || {}).patches || 0;
     $("aiOut").innerHTML =
       `<div class="note info"><b>Nothing in the shortlist fits</b>${
-        esc(result.note || "The model found no candidate that actually does this.")}</div>` +
+        esc(note || "The model found no candidate that actually does this.")}${
+        searchedAgainFor.length
+          ? ` It searched again for ${esc(searchedAgainFor.flat().join(", "))} and still found nothing.`
+          : ""}</div>` +
       `<div class="note info"><b>Try the other catalogue?</b>
         ${other === "patches"
           ? `There are also user patches — smaller changes to KOReader's own behaviour,
@@ -1170,16 +1407,226 @@ async function runAI() {
   }
 
   const tokens = tokenise(retrievalQuery);
+  // The extra searches are named, not hidden. They cost the reader's own key,
+  // and seeing which words found an answer is half of what makes the answer
+  // trustworthy.
+  const searchLine = [
+    terms ? `searched for ${terms.slice(0, 6).join(", ")}` : "",
+    ...searchedAgainFor.map(t => `then for ${t.slice(0, 6).join(", ")}`)
+  ].filter(Boolean).join(" · ");
   $("aiOut").innerHTML =
-    `<div class="section-title">${picks.length} of ${candidates.length} candidates fit${
-      terms ? ` · searched for ${esc(terms.slice(0, 6).join(", "))}` : ""}</div>` +
-    (result.note ? `<div class="note info"><b>Note</b>${esc(result.note)}</div>` : "") +
-    picks.map(p => {
+    `<div class="ai-head"><span class="section-title">${picks.length} of ${weighed} candidates fit${
+      searchLine ? ` · ${esc(searchLine)}` : ""}</span>` +
+    `<button class="btn ghost" id="shareOpen">Share</button></div>` +
+    (note ? `<div class="note info"><b>Note</b>${esc(note)}</div>` : "") +
+    picks.map((p, i) => {
       const entry = byId.get(p.id);
-      return `<div class="ai-result">${card(entry, tokens)
-        .replace("</article>", `<p class="ai-why">${esc(p.why || "")}</p></article>`)}</div>`;
+      return `<div class="ai-result"><span class="ai-rank">${
+        i === 0 ? "Best match" : `#${i + 1}`}${
+        p.score != null ? ` · fit ${Math.round(p.score)}` : ""}</span>${
+        card(entry, tokens)
+          .replace("</article>", `<p class="ai-why">${esc(p.why || "")}</p></article>`)}</div>`;
     }).join("");
   bindReadme($("aiOut"), picks.map(p => byId.get(p.id)));
+  state.answer = {
+    question, tab: state.tab, note,
+    model: (aiConfig() || {}).model || (PROVIDERS[(aiConfig() || {}).provider] || {}).model || "",
+    picks: picks.map(p => ({ id: p.id, fit: p.score, why: p.why }))
+  };
+  bindShare();
+}
+
+/* ------------------------------------------------------------------- share */
+
+// Both links carry their payload in the fragment, which never leaves the
+// browser: there is no server here to store an answer in, and adding one to
+// share a paragraph of text would be the largest thing in the project.
+const b64url = text => btoa(String.fromCharCode(...new TextEncoder().encode(text)))
+  .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const unb64url = text => new TextDecoder().decode(Uint8Array.from(
+  atob(text.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0)));
+
+const SHARE_DEFAULTS = { why: true, fit: true, note: true, warnings: true, model: true, link: true };
+
+function shareOpts() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem("kpi.share") || "{}"); } catch {}
+  const out = {};
+  for (const key of Object.keys(SHARE_DEFAULTS)) {
+    out[key] = typeof saved[key] === "boolean" ? saved[key] : SHARE_DEFAULTS[key];
+  }
+  return out;
+}
+
+function shareWarnings(answer) {
+  const ids = new Set(answer.picks.map(p => p.id));
+  return (state.index.distinctions || [])
+    .filter(d => (d.between || []).filter(x => ids.has(x)).length >= 2)
+    .map(d => d.say);
+}
+
+// Plain text, because the destination is a forum post, a chat message or an
+// email. Markdown would render in some of those and be read as punctuation in
+// the rest; a numbered list reads as intended everywhere.
+function shareTextFor(answer, opts) {
+  const site = location.origin + location.pathname;
+  const byId = new Map((state.tab === "patches" ? state.index.patches : state.index.plugins)
+    .map(e => [e.id, e]));
+  const lines = [
+    `KOReader Plugin Finder — "${answer.question}"`,
+    ""
+  ];
+  answer.picks.forEach((p, i) => {
+    const entry = byId.get(p.id);
+    const fit = opts.fit && p.fit != null ? ` · fit ${Math.round(p.fit)}` : "";
+    lines.push(`${i + 1}. ${p.id}${fit}`);
+    if (opts.why && p.why) lines.push(`   ${p.why}`);
+    if (entry) lines.push(`   ${entry.url}`);
+    lines.push("");
+  });
+  if (opts.note && answer.note) lines.push(`Note: ${answer.note}`, "");
+  if (opts.warnings) {
+    for (const say of shareWarnings(answer)) lines.push(`Careful: ${say}`, "");
+  }
+  const credit = opts.model && answer.model
+    ? `Answered by ${answer.model} · ${answer.tab === "patches" ? "patches" : "plugins"} catalogue`
+    : `From the ${answer.tab === "patches" ? "patch" : "plugin"} catalogue`;
+  lines.push(credit);
+  if (opts.link) lines.push(`${site}#ask=${encodeURIComponent(answer.question)}`);
+  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n";
+}
+
+function shareUrlFor(answer) {
+  // Short keys and no whitespace: this ends up in the address bar, and every
+  // byte spent on field names is a byte of somebody's answer that does not fit.
+  const payload = {
+    q: answer.question,
+    t: answer.tab === "patches" ? "p" : undefined,
+    m: answer.model || undefined,
+    n: answer.note || undefined,
+    p: answer.picks.map(p => [p.id, p.fit == null ? null : Math.round(p.fit), p.why || ""])
+  };
+  return location.origin + location.pathname + "#s=" + b64url(JSON.stringify(payload));
+}
+
+// A shared answer is rendered from the link alone: no key, no provider, no
+// second opinion. It is somebody else's model's output and is labelled as
+// such -- presenting it as this site's recommendation would be the one way
+// this feature could mislead.
+function renderShared(payload) {
+  const source = state.tab === "patches" ? state.index.patches : state.index.plugins;
+  const byId = new Map(source.map(e => [e.id, e]));
+  const picks = (payload.p || [])
+    .map(([id, fit, why]) => ({ id, score: fit == null ? null : +fit, why: why || "" }))
+    .filter(p => typeof p.id === "string");
+  const found = picks.filter(p => byId.has(p.id));
+  const missing = picks.filter(p => !byId.has(p.id));
+
+  $("aiQuestion").value = payload.q || "";
+  state.answer = { question: payload.q || "", tab: state.tab, note: payload.n || "",
+                   model: payload.m || "", picks: found.map(p => ({ id: p.id, fit: p.score, why: p.why })) };
+
+  const tokens = tokenise(payload.q || "");
+  $("aiEscape").hidden = true;
+  $("aiOut").innerHTML =
+    `<div class="share-banner"><b>A shared answer</b>
+      <p>${payload.m ? `Written by ${esc(payload.m)}, ` : ""}from someone else's
+      question — not a recommendation by this site. The plugins below are shown
+      with today's catalogue data. Ask it yourself above with your own key, or
+      <button class="linkish" id="sharedBrowse">browse the catalogue</button>.</p></div>` +
+    (payload.n ? `<div class="note info"><b>Note</b>${esc(payload.n)}</div>` : "") +
+    (found.length
+      ? `<div class="ai-head"><span class="section-title">${found.length} shared
+         ${found.length === 1 ? "pick" : "picks"}</span>` +
+        `<button class="btn ghost" id="shareOpen">Share</button></div>`
+      : `<div class="note info"><b>Nothing left to show</b>
+         Every entry in this link has since left the index.</div>`) +
+    found.map((p, i) => {
+      const entry = byId.get(p.id);
+      return `<div class="ai-result"><span class="ai-rank">${
+        i === 0 ? "Best match" : `#${i + 1}`}${
+        p.score != null ? ` · fit ${Math.round(p.score)}` : ""}</span>${
+        card(entry, tokens)
+          .replace("</article>", `<p class="ai-why">${esc(p.why)}</p></article>`)}</div>`;
+    }).join("") +
+    (missing.length
+      ? `<div class="note info"><b>${missing.length} no longer in the index</b>${
+          esc(missing.map(p => p.id).join(", "))}. A plugin leaves when its
+          repository is deleted, renamed or archived.</div>`
+      : "");
+
+  bindReadme($("aiOut"), found.map(p => byId.get(p.id)));
+  if ($("sharedBrowse")) $("sharedBrowse").addEventListener("click", () => $("aiClose").click());
+  bindShare();
+}
+
+function bindShare() {
+  const button = $("shareOpen");
+  if (button) button.addEventListener("click", openShare);
+}
+
+function openShare() {
+  if (!state.answer || !state.answer.picks.length) return;
+  const opts = shareOpts();
+  $("shareOpts").querySelectorAll("[data-share]").forEach(box => {
+    box.checked = opts[box.dataset.share];
+  });
+  paintShare();
+  $("shareModal").hidden = false;
+}
+
+function paintShare() {
+  const opts = shareOpts();
+  const text = shareTextFor(state.answer, opts);
+  const url = shareUrlFor(state.answer);
+  $("shareText").value = text;
+  $("shareUrl").value = url;
+  // Said rather than enforced. A link this size works everywhere a link works;
+  // the number is there so nobody pastes 4 KB into a chat window unaware.
+  $("shareSize").textContent = `${text.length} characters · link ${url.length}`;
+}
+
+function setupShareModal() {
+  const close = () => { $("shareModal").hidden = true; };
+  $("shareClose").addEventListener("click", close);
+  $("shareModal").addEventListener("click", e => { if (e.target === $("shareModal")) close(); });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && !$("shareModal").hidden) close();
+  });
+  $("shareOpts").querySelectorAll("[data-share]").forEach(box => {
+    box.addEventListener("change", () => {
+      const next = shareOpts();
+      next[box.dataset.share] = box.checked;
+      localStorage.setItem("kpi.share", JSON.stringify(next));
+      paintShare();
+    });
+  });
+  const flash = (button, label) => {
+    const was = button.textContent;
+    button.textContent = label;
+    setTimeout(() => { button.textContent = was; }, 1200);
+  };
+  const copy = async value => {
+    try { await navigator.clipboard.writeText(value); }
+    catch {
+      // Clipboard access is refused outside a secure context, and this page is
+      // opened from a file:// path often enough to matter.
+      const scratch = document.createElement("textarea");
+      scratch.value = value;
+      document.body.appendChild(scratch);
+      scratch.select();
+      document.execCommand("copy");
+      scratch.remove();
+    }
+  };
+  $("shareCopy").addEventListener("click", async () => {
+    await copy($("shareText").value);
+    flash($("shareCopy"), "Copied");
+  });
+  $("shareUrlCopy").addEventListener("click", async () => {
+    await copy($("shareUrl").value);
+    flash($("shareUrlCopy"), "✓");
+  });
 }
 
 /* ------------------------------------------------------------------ render */
@@ -1219,6 +1666,9 @@ function card(entry, tokens) {
         ? `<span class="badge badge-settled" title="No commits in over a year. Plenty of small plugins are simply finished, so this is shown rather than hidden.">no recent changes</span>`
         : ""}
       <span class="badge">★ ${stars ?? 0}</span>
+      ${isNew(entry) ? `<span class="badge badge-new" title="Repository created in the last ${NEW_DAYS} days">new</span>` : ""}
+      ${updatedOf(entry) ? `<span class="badge" title="${esc(patch ? "This patch file was last changed then" : "Last commit to the repository")}">updated ${esc(whenLabel(updatedOf(entry)))}</span>` : ""}
+      ${createdOf(entry) && !isNew(entry) ? `<span class="badge" title="Repository created">added ${esc(whenLabel(createdOf(entry)))}</span>` : ""}
       ${patch && entry.order != null ? `<span class="badge">load order ${entry.order}</span>` : ""}
       ${(entry.categories || []).map(c => `<span class="badge">${esc(c)}</span>`).join("")}
       ${why.length ? `<span class="why">matched <span>${why.map(esc).join(", ")}</span></span>` : ""}
@@ -1264,16 +1714,31 @@ function render() {
   if (tokens.length) {
     list = list.map(e => [score(e, tokens), e]).filter(p => p[0] > 0)
                .sort((a, b) => b[0] - a[0] || a[1].id.localeCompare(b[1].id))
-               .map(p => p[1]).slice(0, 30);
+               .map(p => p[1]);
     heading = `${list.length} match${list.length === 1 ? "" : "es"}`;
   } else {
     // No query: lead with the curated set rather than the most-starred, which
     // is what someone browsing without a goal actually wants to see.
     const pop = e => (isPatch(e) ? e.repo_stars : e.stars) || 0;
     list.sort((a, b) => (TIER_BONUS[b.tier] - TIER_BONUS[a.tier]) || (pop(b) - pop(a)));
-    list = list.slice(0, 30);
     heading = state.category ? "In this category" : "Worth starting with";
   }
+
+  // Applied before the cut, deliberately: "recently updated" has to mean the
+  // most recent of everything that matched, not the most recent of the thirty
+  // that ranked best, which is a different and much less useful list.
+  if (state.sort !== "match") {
+    const key = state.sort === "new" ? createdOf : updatedOf;
+    // Entries carried over from before the field existed have no creation
+    // date. Ordering them by an empty string would park them all at the end
+    // pretending to be the oldest things in the catalogue.
+    if (state.sort === "new") list = list.filter(e => createdOf(e));
+    list.sort((a, b) => key(b).localeCompare(key(a)) || a.id.localeCompare(b.id));
+    if (!tokens.length) {
+      heading = state.sort === "new" ? "Newest first" : "Recently updated";
+    }
+  }
+  list = list.slice(0, 30);
 
   $("count").textContent = tokens.length ? heading : "";
 
@@ -1301,6 +1766,24 @@ function render() {
   $("notes").innerHTML = warning + hint + (list.length ? noteFor(list, tokens) : "");
   if ($("hintOpen")) {
     $("hintOpen").addEventListener("click", () => $("askAi").click());
+  }
+
+  // The one empty list that is not the reader's fault: creation dates arrive
+  // with a full rebuild, and until the first one lands after this shipped the
+  // catalogue has none at all. Saying "nothing matched" there would blame the
+  // query for a gap in the data.
+  if (!list.length && state.sort === "new") {
+    $("results").innerHTML = `<div class="state">
+      No creation dates in this index yet. They are collected by the monthly
+      full rebuild; until the next one, order by
+      <button class="linkish" id="sortFallback">recently updated</button> instead.
+    </div>`;
+    $("sortFallback").addEventListener("click", () => {
+      state.sort = "updated";
+      $("sort").value = "updated";
+      render();
+    });
+    return;
   }
 
   if (!list.length) {
@@ -1389,7 +1872,13 @@ function bindReadme(root, entries) {
           esc(text || "This repository's README had no readable prose.");
         panel.dataset.loaded = "1";
       } catch (err) {
-        panel.textContent = `Could not load the README (${err.message}).`;
+        // A missing detail file is not a broken page: a build can publish an
+        // entry whose excerpt has not been written yet. Say so, and send the
+        // reader to the document itself rather than to a status code.
+        panel.innerHTML = err.message === "404"
+          ? `No README excerpt was published for this one. `
+            + `<a href="${esc(entry.url)}" target="_blank" rel="noopener">Read it on GitHub</a>.`
+          : `Could not load the README (${esc(err.message)}).`;
       }
     });
   });
@@ -1401,6 +1890,7 @@ function renderChips() {
   const source = state.tab === "patches"
     ? (state.patchCategories || [])
     : (state.index.categories || []);
+  $("chipsHead").hidden = !source.length;
   $("chips").innerHTML = source
     .map(c => `<button class="chip" data-id="${esc(c.id)}" aria-pressed="false">${
       esc(c.label)}<span class="n">${c.count}</span></button>`).join("");
@@ -1467,12 +1957,18 @@ function renderFreshness() {
 // opened, the URL never changed, and nothing said why.
 function syncUrl() {
   const params = new URLSearchParams();
+  if (state.sort !== "match") params.set("sort", state.sort);
   if (!$("aiView").hidden) params.set("ai", "1");
   if (state.tab === "patches") params.set("tab", "patches");
   if (state.query.trim()) params.set("q", state.query.trim());
   if (state.category) params.set("cat", state.category);
   const query = params.toString();
-  history.replaceState(null, "", query ? `?${query}` : location.pathname);
+  // A shared link stays in the address bar while its answer is on screen:
+  // rewriting the URL from under a reader would make refreshing lose the thing
+  // they were sent, and the copy in the share dialog is built from the
+  // pathname, so nothing downstream depends on this.
+  const keep = state.sharedHash || "";
+  history.replaceState(null, "", (query ? `?${query}` : location.pathname) + keep);
 }
 
 async function boot() {
@@ -1505,6 +2001,15 @@ async function boot() {
       b.setAttribute("aria-pressed", String(b.dataset.tab === state.tab)));
     // Deep search is keyed by plugin id, so it can never match a patch.
     $("deepWrap").hidden = state.tab === "patches";
+    // A patch file has a last-changed date but no creation date -- finding one
+    // means walking a repository's history per file, which is the one thing
+    // this index refuses to spend requests on. Offering an order it cannot
+    // produce would return an empty list and read as a bug.
+    $("sortNew").hidden = state.tab === "patches";
+    if (state.tab === "patches" && state.sort === "new") {
+      state.sort = "updated";
+      $("sort").value = state.sort;
+    }
 
     // Patches ship separately and load on first use, so the common case --
     // someone looking for a plugin -- never downloads them.
@@ -1552,6 +2057,8 @@ async function boot() {
   });
   $("showC").addEventListener("change", e => { state.showC = e.target.checked; render(); });
 
+  $("sort").addEventListener("change", e => { state.sort = e.target.value; render(); });
+
   // Fetched when someone first types, not when the page loads. It is 600 KB,
   // and a reader who only browses the categories should not pay for it; by the
   // time a query is finished it has usually arrived, and the results re-render
@@ -1590,12 +2097,17 @@ async function boot() {
 
   setupAI();
   setupInstallModal();
+  setupShareModal();
 
   // After setupAI, not before it. ?ai=1 works by clicking the pill, and the
   // pill's listener is registered in setupAI -- run earlier, the click landed
   // on nothing and the page opened in browse mode with no sign of why.
   const params = new URLSearchParams(location.search);
   if (params.has("q")) { state.query = params.get("q"); $("q").value = state.query; }
+  if (["updated", "new"].includes(params.get("sort"))) {
+    state.sort = params.get("sort");
+    $("sort").value = state.sort;
+  }
   if (params.get("tab") === "patches") await switchTab("patches");
   if (params.has("cat")) {
     const known = (state.tab === "patches" ? state.patchCategories : state.index.categories) || [];
@@ -1607,6 +2119,34 @@ async function boot() {
     }
   }
   if (params.get("ai") === "1") $("askAi").click();
+
+  // Both shared forms live in the fragment rather than the query string: it is
+  // never sent to the server, so a shared answer is not something this site's
+  // host gets to read, and neither link can be logged by anything in between.
+  const hash = location.hash || "";
+  if (hash.startsWith("#ask=")) {
+    state.sharedHash = hash;
+    $("askAi").click();
+    $("aiQuestion").value = decodeURIComponent(hash.slice(5));
+  } else if (hash.startsWith("#s=")) {
+    let payload = null;
+    try { payload = JSON.parse(unb64url(hash.slice(3))); } catch {}
+    if (payload && Array.isArray(payload.p)) {
+      state.sharedHash = hash;
+      if (payload.t === "p") await switchTab("patches");
+      $("askAi").click();
+      renderShared(payload);
+    } else {
+      // A truncated link is the likeliest failure -- chat clients wrap long
+      // URLs -- and it must not look like a broken site.
+      $("askAi").click();
+      $("aiOut").innerHTML = `<div class="note"><b>That shared link is incomplete</b>
+        Links carry the whole answer in the address, so one that was cut short
+        cannot be recovered. Ask the question yourself above, or
+        <button class="linkish" id="sharedBrokenBrowse">browse the catalogue</button>.</div>`;
+      $("sharedBrokenBrowse").addEventListener("click", () => $("aiClose").click());
+    }
+  }
 
   $("clear").hidden = !state.query;
   render();
@@ -1680,6 +2220,20 @@ function setupAI() {
     // as a seed -- from here on the two inputs are independent.
     if (!$("aiQuestion").value && state.query.trim()) $("aiQuestion").value = state.query.trim();
     if (!aiConfig()) $("aiPanel").hidden = false;
+
+    // Shown only before a first answer: once there are results on screen the
+    // reader has what they came for, and a standing offer to leave is noise.
+    const kind = state.tab === "patches" ? "patch files" : "plugins";
+    const total = (state.tab === "patches"
+      ? state.index.patches.length || (state.index.counts || {}).patches
+      : state.index.plugins.length) || 0;
+    $("aiEscape").hidden = Boolean($("aiOut").innerHTML.trim());
+    $("aiEscape").innerHTML =
+      `No key, or just looking? The catalogue behind this dialog is
+       <button class="linkish" id="aiEscapeBack">${total} ${kind} you can search
+       and filter without one</button>.`;
+    if ($("aiEscapeBack")) $("aiEscapeBack").addEventListener("click", () => $("aiClose").click());
+
     $("aiQuestion").focus();
     syncUrl();
   };
@@ -1709,14 +2263,17 @@ function setupAI() {
 
   // Tuning: written on change, clamped on read, and each field can go back to
   // its measured default on its own.
-  const TUNE_FIELDS = { shortlist: "tuneShortlist", picks: "tunePicks", chars: "tuneChars" };
+  const TUNE_FIELDS = { shortlist: "tuneShortlist", picks: "tunePicks",
+                        chars: "tuneChars", retries: "tuneRetries" };
   const showTuning = () => {
     const t = tuning();
     for (const [key, id] of Object.entries(TUNE_FIELDS)) $(id).value = t[key];
     // Rough, and said to be rough: token counts vary by model and tokeniser.
     const tokens = Math.round(t.shortlist * (t.chars + 60) / 4 / 100) * 100;
     $("tuneCost").textContent =
-      `About ${tokens.toLocaleString()} tokens a question — a fraction of a cent on most providers.`;
+      `About ${tokens.toLocaleString()} tokens a question — a fraction of a cent on most `
+      + `providers${t.retries ? `, and up to ${t.retries + 1}× that on a question that `
+        + `sends the model looking twice` : ""}.`;
   };
   const writeTuning = () => {
     const next = {};
