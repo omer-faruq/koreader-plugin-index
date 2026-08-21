@@ -374,6 +374,10 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
    The header button is one exit; this is the one that says what is behind it,
    which is the part that was missing. */
 .ai-escape, .ai-again { font-size: .85rem; color: var(--muted); margin: 14px 0 0; }
+/* The narrowing box is the last thing on the again line, and what can follow
+   it -- the other-catalogue offer -- carries no top margin of its own. Flush
+   against the input, the two read as one control instead of two offers. */
+.ai-again { margin-bottom: 18px; }
 /* One line, deliberately. A textarea here would be read as a chat box and
    filled with "tell me more about the second one" -- which is a question, not
    a narrowing, and would come back as four picks that answer neither. The
