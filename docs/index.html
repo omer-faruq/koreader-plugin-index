@@ -362,6 +362,15 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
    The header button is one exit; this is the one that says what is behind it,
    which is the part that was missing. */
 .ai-escape, .ai-again { font-size: .85rem; color: var(--muted); margin: 14px 0 0; }
+/* One line, deliberately. A textarea here would be read as a chat box and
+   filled with "tell me more about the second one" -- which is a question, not
+   a narrowing, and would come back as four picks that answer neither. The
+   height of the control is what says which of the two it is. */
+.ai-narrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+.ai-narrow input {
+  flex: 1 1 260px; min-width: 0; padding: 7px 10px; font-size: .85rem; color: var(--text);
+  background: var(--bg); border: 1px solid var(--border); border-radius: 7px;
+}
 .sheet-wide { max-width: 620px; }
 .share-opts { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 12px; font-size: .85rem; }
 .share-opts label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
@@ -1027,12 +1036,28 @@ const RETRY_FOLLOWUP =
 const ANOTHER_ANGLE_PROMPT = [
   "A search for KOReader plugins has already been run with the words in `tried`,",
   "and the reader was not satisfied with what it found.",
+  // Present only when the reader typed something. Their words are worth more
+  // than a guess at what went wrong, and they arrive in whatever language the
+  // question was asked in -- the terms still have to come back English.
+  "If `missing` is there, it is the reader saying in their own words what the",
+  "results got wrong. Let it steer the terms; it may not be written in English.",
   "Reply with English search words for the same question approached differently:",
   "the underlying problem, the machinery it would be built on, what the feature is",
   "called elsewhere. No term may be a word in `tried` or a rephrasing of one.",
   "Never 'koreader', 'plugin' or 'ereader'. Four to eight terms, no explanation.",
   'JSON only: {"terms":["..."]}'
 ].join(" ");
+
+// A narrowing, not a second question. Without this the field reads as more
+// context and a model happily returns the same picks with longer reasons,
+// which is the one outcome that makes the reader feel unheard.
+const REFINE_RULE =
+  "The reader has since added `refinement`: what the results they were shown got "
+  + "wrong, in their own words and possibly not in English. It narrows the question "
+  + "rather than replacing it. A pick must answer the question AND satisfy the "
+  + "refinement; one that fails the refinement does not belong in the list at all, "
+  + "however well it answers the question. Score on how well it does both, and say "
+  + "in each reason how it meets the refinement.";
 
 const PATCH_RULES = [
   "These are user patches, not plugins: each edits KOReader's own behaviour and",
@@ -1062,6 +1087,7 @@ const SYSTEM_PROMPT = [
   // drawn in them. Offered only while a round remains, and worded so it is an
   // escape from a bad list rather than a free second opinion.
   "{RETRY}",
+  "{REFINE}",
   // Named outright rather than left to the model to work out. "Reply in the
   // same language as the question" put the detection inside a long prompt and
   // lost to a model's own default -- DeepSeek answered English questions in
@@ -1342,6 +1368,10 @@ async function runAI() {
     // round the reader asks for is asked for words unlike these, and stage
     // one's are the ones a dissatisfied reader most wants moved away from.
     tried: (terms || []).slice(),
+    // What the reader has typed into the narrowing box, oldest first. They
+    // accumulate: a second narrowing adds a condition rather than lifting the
+    // first, which is what "narrow" has to mean if it is to mean anything.
+    refinements: [],
     // Counted after a call returns, not before it goes out. A round that
     // failed retrieved candidates the model never saw, and reporting them as
     // weighed would overstate what the answer rests on.
@@ -1363,8 +1393,8 @@ async function aiRounds(cfg, session, candidates, budget) {
     // "Again" is a fact about the session, not about this call. A round the
     // reader asked for is the first of its call and still the second thing
     // the model has been shown.
-    const more = round > 0 || session.weighed > 0;
-    $("aiOut").innerHTML = `<div class="state">${more
+    const later = round > 0 || session.weighed > 0;
+    $("aiOut").innerHTML = `<div class="state">${later
       ? `Looking again — weighing ${candidates.length} more candidates…`
       : `Weighing ${candidates.length} candidates…`}</div>`;
 
@@ -1384,26 +1414,38 @@ async function aiRounds(cfg, session, candidates, budget) {
         // Withdrawn once the budget is spent. Left in, a model asks for a
         // search that will not happen and words its answer as provisional.
         .replace("{RETRY}", roundsLeft > 0 ? RETRY_RULE : "")
-        .replace("{AGAIN}", roundsLeft > 0 ? '"search_again":["term"],' : "");
+        .replace("{AGAIN}", roundsLeft > 0 ? '"search_again":["term"],' : "")
+        .replace("{REFINE}", session.refinements.length ? REFINE_RULE : "");
       let system = state.tab === "patches" ? base + " " + PATCH_RULES : base;
-      if (more) system += " " + RETRY_FOLLOWUP;
+      // Gated on there being picks to carry, not on this being a later round.
+      // The whole of RETRY_FOLLOWUP is about `already_found`, and a round that
+      // follows one which chose nothing -- or a narrowing, which reopens the
+      // picks rather than keeping them -- would be told it is keeping entries
+      // that are not there.
+      if (merged.size) system += " " + RETRY_FOLLOWUP;
       result = await callModel(cfg, system, JSON.stringify({
         question: session.question,
         looking_for: state.tab === "patches" ? "user patches" : "plugins",
         candidates: candidates.map(compact),
+        // Joined rather than listed, because they are conditions on one
+        // question and a model handed an array tends to answer the last item.
+        ...(session.refinements.length
+          ? { refinement: session.refinements.join("; ") } : {}),
         ...(merged.size ? { already_found: [...merged.values()]
           .map(p => ({ id: p.id, fit: p.score, why: p.why })) } : {}),
         known_confusions: relevant.map(d => ({ between: d.between, note: d.say }))
       }));
     } catch (err) {
-      // A failed later round keeps the earlier rounds' answer: better than
-      // replacing results the reader can already see with an error. It is
-      // recorded rather than swallowed, though -- the request was paid for
-      // with their key, and one they asked for by name cannot fail in silence.
-      if (merged.size) { searchedAgainFor.pop(); session.failed = describeFailure(err); break; }
-      // Same diagnosis as the settings test, so a failure reads the same way
-      // wherever it surfaces.
-      const [what, detail] = describeFailure(err);
+      // Always recorded, never swallowed: the request was paid for with the
+      // reader's key, and one they asked for by name cannot fail in silence.
+      session.failed = describeFailure(err);
+      // A failed later round keeps the earlier rounds' answer, which is better
+      // than replacing results the reader can already see with an error.
+      if (merged.size) { searchedAgainFor.pop(); break; }
+      // Nothing to fall back on, so the failure is the whole page. Same
+      // diagnosis as the settings test, so it reads the same way wherever it
+      // surfaces. False says only that there is no answer to render.
+      const [what, detail] = session.failed;
       $("aiOut").innerHTML =
         `<div class="note"><b>${esc(what)}</b>${esc(detail)}</div>`;
       return false;
@@ -1482,29 +1524,55 @@ function againLine(session) {
     return `<div class="ai-again">Every entry in scope has now been weighed
       against this question.</div>`;
   }
-  return `<div class="ai-again">Not what you meant?
-    <button class="linkish" id="aiAgain">Look again with different words</button>
-    — one more search, from another angle, over entries not yet seen.</div>`;
+  // The box is optional and says so. Left empty the round works as it always
+  // did -- the model guesses what went wrong -- and a guess is a poor second
+  // to being told, which is the whole reason the box is here.
+  return `<div class="ai-again">Not what you meant? Say what is missing, or
+    <button class="linkish" id="aiAgain">look again with different words</button>
+    — one more search over entries not yet seen.
+    <span class="ai-narrow">
+      <input id="aiNarrow" type="text" name="kpi-narrow" autocomplete="off"
+             data-1p-ignore data-lpignore="true"
+             aria-label="Narrow the question: say what the results are missing"
+             placeholder="e.g. must work offline · no subscription · Kobo only">
+      <button class="linkish" id="aiNarrowGo">Search again</button>
+    </span></div>`;
 }
 
 function bindAgain(session) {
   if (!$("aiAgain")) return;
-  $("aiAgain").addEventListener("click", () => lookAgain(session));
+  const go = () => lookAgain(session, ($("aiNarrow") || {}).value || "");
+  $("aiAgain").addEventListener("click", () => lookAgain(session, ""));
+  $("aiNarrowGo").addEventListener("click", go);
+  // Enter in a one-line box means send, everywhere else on this page and here.
+  $("aiNarrow").addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); go(); }
+  });
 }
 
 // Two requests, the same as a first ask: one to find another angle, one to
 // weigh what it retrieves.
-async function lookAgain(session) {
+async function lookAgain(session, narrowing) {
   const cfg = aiConfig();
   if (!cfg || !cfg.key) { $("aiPanel").hidden = false; return; }
+  // Trimmed and capped. This is one condition on a question, and a paragraph
+  // pasted in here would be a question of its own -- which the answer shape
+  // has no room for and the rule above explicitly refuses to treat as one.
+  const missing = String(narrowing || "").trim().slice(0, 240);
+  // Recorded before the request, so a round that fails still shows what the
+  // reader asked for rather than losing their words with the failure.
+  if (missing) session.refinements.push(missing);
   // The answer is about to stop being the one the shared link described.
   state.sharedHash = null;
-  $("aiOut").innerHTML = `<div class="state">Looking for another angle…</div>`;
+  $("aiOut").innerHTML = `<div class="state">${missing
+    ? "Looking again, narrowed…" : "Looking for another angle…"}</div>`;
 
   let fresh = [];
   try {
-    const out = await callModel(cfg, ANOTHER_ANGLE_PROMPT,
-      JSON.stringify({ question: session.question, tried: session.tried }));
+    const out = await callModel(cfg, ANOTHER_ANGLE_PROMPT, JSON.stringify({
+      question: session.question, tried: session.tried,
+      ...(missing ? { missing } : {})
+    }));
     // Filtered here as well as forbidden in the prompt: a model that ignores
     // `tried` would otherwise retrieve the shortlist already on screen.
     fresh = searchTerms(out.terms || [], 8).filter(w => !session.tried.includes(w));
@@ -1513,23 +1581,53 @@ async function lookAgain(session) {
     renderAnswer(session);
     return;
   }
-  if (!fresh.length) {
+  // Without a narrowing there is nothing to do but retrieve, so no new words
+  // means no round. With one there is: the condition applies to the picks
+  // already made whether or not retrieval turns up anything else.
+  if (!fresh.length && !missing) {
     session.failed = ["No other angle to try",
       "The model returned only words this search has already used."];
     renderAnswer(session);
     return;
   }
 
-  const next = shortlistFor(fresh.join(" ") + " " + session.question)
-    .filter(e => !session.byId.has(e.id));
-  if (!next.length) { renderAnswer(session); return; }
+  const next = fresh.length
+    ? shortlistFor(fresh.join(" ") + " " + session.question)
+        .filter(e => !session.byId.has(e.id))
+    : [];
 
-  session.searchedAgainFor.push(fresh);
-  session.tried.push(...fresh);
+  // A narrowing reopens the picks already made. They were judged against a
+  // question that did not carry this condition, so one that fails it has to be
+  // able to leave the list -- and the merge only ever raises a score, never
+  // withdraws a pick. They go back in as candidates to be judged again, and
+  // `merged` starts empty so a score earned under the looser question cannot
+  // outrank one earned under the tighter one.
+  const reopened = missing
+    ? [...session.merged.keys()].map(id => session.byId.get(id)).filter(Boolean)
+    : [];
+  const candidates = reopened.concat(next);
+  if (!candidates.length) { renderAnswer(session); return; }
+
+  if (fresh.length) {
+    session.searchedAgainFor.push(fresh);
+    session.tried.push(...fresh);
+  }
+  const kept = new Map(session.merged);
+  if (missing) session.merged.clear();
   // Budget zero: the reader asked for one round, so one round is what this is.
   // It also withdraws RETRY_RULE, so the model cannot chain automatic searches
   // off a manual one and spend somebody's key on rounds nobody asked for.
-  if (await aiRounds(cfg, session, next, 0)) renderAnswer(session);
+  const ok = await aiRounds(cfg, session, candidates, 0);
+  if (ok) { renderAnswer(session); return; }
+
+  // The request failed, so nothing was judged against the narrowing. Putting
+  // the earlier picks back is not a claim that they satisfy it: it is refusing
+  // to lose them to a round that never happened. The narrowing comes off with
+  // them, so the next attempt starts from the same place this one did.
+  for (const [id, pick] of kept) session.merged.set(id, pick);
+  if (missing) session.refinements.pop();
+  if (fresh.length) session.searchedAgainFor.pop();
+  if (session.merged.size) renderAnswer(session);
 }
 
 function renderAnswer(session) {
@@ -1569,7 +1667,11 @@ function renderAnswer(session) {
   // trustworthy.
   const searchLine = [
     terms.length ? `searched for ${terms.slice(0, 6).join(", ")}` : "",
-    ...searchedAgainFor.map(t => `then for ${t.slice(0, 6).join(", ")}`)
+    ...searchedAgainFor.map(t => `then for ${t.slice(0, 6).join(", ")}`),
+    // The reader's own words belong in the provenance line for the same reason
+    // the search terms do: they changed the answer, so an answer that does not
+    // show them cannot be checked against what was asked.
+    ...session.refinements.map(r => `narrowed by "${r}"`)
   ].filter(Boolean).join(" · ");
   // Under 60 is what the prompt itself calls partial or adjacent. Four
   // adjacent answers leave a reader roughly where no answer would, so the
@@ -1594,7 +1696,12 @@ function renderAnswer(session) {
   bindAgain(session);
   if (weak) bindOtherCatalogue();
   state.answer = {
-    question: session.question, tab: session.tab, note: session.note,
+    // Folded into the question rather than carried beside it. A narrowing is a
+    // condition on the question, and a shared link whose `q` omits it shows a
+    // reader picks that do not follow from the question above them -- which is
+    // the one thing a link that carries its own answer must never do.
+    question: [session.question, ...session.refinements].join(" — "),
+    tab: session.tab, note: session.note,
     model: (aiConfig() || {}).model || (PROVIDERS[(aiConfig() || {}).provider] || {}).model || "",
     picks: picks.map(p => ({ id: p.id, fit: p.score, why: p.why }))
   };

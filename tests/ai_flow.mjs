@@ -28,21 +28,50 @@ const body = html.match(/<script>([\s\S]*?)<\/script>\s*<\/body>/)[1]
 // Enough of a document for the dialog to write into and read back, and no
 // more. Nothing here is asserted on; the assertions are all about what went
 // to the model and what came back out as HTML.
-const els = new Map();
-const makeEl = id => ({
-  id, innerHTML: "", textContent: "", value: "", hidden: false, disabled: false,
-  dataset: {}, classList: { add() {}, remove() {}, toggle() {} },
-  style: {}, checked: false,
-  addEventListener(type, fn) { (this._on ||= {})[type] = fn; },
-  removeEventListener() {},
-  querySelectorAll: () => [],
-  querySelector: () => null,
-  getBoundingClientRect: () => ({ top: 0 }),
-  setAttribute() {}, removeAttribute() {}, focus() {}, click() { this._on?.click?.(); },
-  scrollIntoView() {}, appendChild() {}, remove() {}
-});
+//
+// One rule is worth the trouble to model properly: an element that is not on
+// the page returns null. Half of this dialog is buttons written into aiOut by
+// one render and gone by the next, and code that reaches for one after it has
+// been rendered away is exactly the mistake worth catching here. So ids in the
+// static markup always resolve, ids currently written into some element's
+// innerHTML resolve until the next render, and everything else is null.
+const staticIds = new Set(
+  [...html.slice(0, html.lastIndexOf("<script>")).matchAll(/\bid="([^"]+)"/g)].map(m => m[1]));
+const els = new Map();    // static: they outlive every render
+const live = new Map();   // written by a render, dropped by the next one
+const makeEl = id => {
+  let inner = "";
+  return {
+    id, textContent: "", value: "", hidden: false, disabled: false,
+    dataset: {}, classList: { add() {}, remove() {}, toggle() {} },
+    style: {}, checked: false,
+    get innerHTML() { return inner; },
+    // Any write is a render, and a render invalidates whatever the last one
+    // put on the page.
+    set innerHTML(v) { inner = v; live.clear(); },
+    addEventListener(type, fn) { (this._on ||= {})[type] = fn; },
+    removeEventListener() {},
+    querySelectorAll: () => [],
+    querySelector: () => null,
+    getBoundingClientRect: () => ({ top: 0 }),
+    // Returns whatever the handler does, so a test can await an async one.
+    setAttribute() {}, removeAttribute() {}, focus() {}, click() { return this._on?.click?.(); },
+    scrollIntoView() {}, appendChild() {}, remove() {}
+  };
+};
+const lookup = id => {
+  if (staticIds.has(id)) {
+    if (!els.has(id)) els.set(id, makeEl(id));
+    return els.get(id);
+  }
+  if (live.has(id)) return live.get(id);
+  const onPage = [...els.values()].some(e => e.innerHTML.includes(`id="${id}"`));
+  if (!onPage) return null;
+  live.set(id, makeEl(id));
+  return live.get(id);
+};
 const document = {
-  getElementById: id => els.get(id) || (els.set(id, makeEl(id)), els.get(id)),
+  getElementById: lookup,
   querySelectorAll: () => [], querySelector: () => null,
   addEventListener() {}, createElement: () => makeEl("tmp"),
   documentElement: makeEl("html"), body: makeEl("body"),
@@ -101,6 +130,23 @@ const takeFirst = fit => user => {
   const id = user.candidates[0].id;
   chosen.push(id);
   return { picks: [{ id, fit, why: "because" }] };
+};
+// For a narrowed round, where the point is that the model may drop what it
+// chose before: the last candidate is always one retrieval has just turned up.
+const takeLast = fit => user => {
+  const id = user.candidates.at(-1).id;
+  chosen.push(id);
+  return { picks: [{ id, fit, why: "meets the condition" }] };
+};
+// Goes through the rendered control rather than calling lookAgain directly,
+// so the wiring is part of what is tested. A missing box is a failure to
+// report, not an exception to die on -- the checks after it still say
+// something.
+const narrow = async text => {
+  const box = document.getElementById("aiNarrow");
+  if (!box) return check("the narrowing box is on the page", false, out().slice(0, 160));
+  box.value = text;
+  await document.getElementById("aiNarrowGo").click();
 };
 
 const t = [];
@@ -213,6 +259,81 @@ check("no round offered against the other catalogue", !out().includes('id="aiAga
   out().slice(0, 200));
 check("the answer itself is still there", ids().length === 1, ids().join());
 api.state.tab = "plugins";
+
+// === 7. the reader says what is missing ===================================
+store.set("kpi.tuning", JSON.stringify({ retries: 0 }));
+script = [
+  { kind: "expand", reply: { terms: ["sync"], language: "English" } },
+  { kind: "weigh", reply: takeFirst(70) }
+];
+document.getElementById("aiQuestion").value = "sync my highlights";
+await api.runAI();
+const before = ids()[0];
+
+script = [
+  { kind: "angle", reply: { terms: ["offline", "local"] } },
+  { kind: "weigh", reply: takeLast(90) }
+];
+await narrow("must work offline");
+
+check("narrowing reaches the angle call", calls.at(-2).user.missing === "must work offline",
+  JSON.stringify(calls.at(-2).user.missing));
+check("narrowing reaches the weigh call", calls.at(-1).user.refinement === "must work offline",
+  JSON.stringify(calls.at(-1).user.refinement));
+check("REFINE_RULE sent with it",
+  calls.at(-1).system.includes("It narrows the question"));
+// The picks were judged against a question that did not carry the condition,
+// so they go back in to be judged again rather than being kept on trust.
+check("earlier pick reopened as a candidate",
+  calls.at(-1).user.candidates.some(c => c.id === before), before);
+check("no already_found on a narrowed round",
+  calls.at(-1).user.already_found === undefined,
+  JSON.stringify(calls.at(-1).user.already_found));
+check("RETRY_FOLLOWUP withheld when nothing is being kept",
+  !calls.at(-1).system.includes("are kept"));
+check("a pick that fails the narrowing leaves the list",
+  !ids().includes(before), ids().join());
+check("the narrowing is shown with the answer",
+  out().includes('narrowed by &quot;must work offline&quot;'), out().slice(0, 300));
+check("the shared question carries the narrowing",
+  api.state.answer.question === "sync my highlights — must work offline",
+  api.state.answer.question);
+check("two requests, same as a first ask", script.length === 0, "left " + script.length);
+
+// === 8. a second narrowing adds a condition, it does not replace one =======
+script = [
+  { kind: "angle", reply: { terms: ["kobo"] } },
+  { kind: "weigh", reply: takeLast(80) }
+];
+await narrow("Kobo only");
+check("narrowings accumulate",
+  calls.at(-1).user.refinement === "must work offline; Kobo only",
+  JSON.stringify(calls.at(-1).user.refinement));
+check("both are shown", out().includes("must work offline") && out().includes("Kobo only"));
+
+// === 9. a narrowed round that fails gives the reader back what they had ====
+const held = ids();
+script = [
+  { kind: "angle", reply: { terms: ["dropbox"] } },
+  { kind: "weigh", throw: true }
+];
+await narrow("free only");
+check("the picks come back", ids().join() === held.join(), ids().join() + " vs " + held.join());
+check("the failed narrowing is not kept",
+  !api.session.refinements.includes("free only"), JSON.stringify(api.session.refinements));
+check("the failure is reported", /couldn|error|reach|refus|fail|wrong/i.test(out()),
+  out().slice(0, 200));
+
+// === 10. an empty box is still the old blind round =========================
+script = [
+  { kind: "angle", reply: { terms: ["calibre"] } },
+  { kind: "weigh", reply: takeLast(85) }
+];
+await narrow("   ");
+check("whitespace is not a narrowing", calls.at(-2).user.missing === undefined,
+  JSON.stringify(calls.at(-2).user.missing));
+check("blind round keeps the earlier picks",
+  Array.isArray(calls.at(-1).user.already_found) && calls.at(-1).user.already_found.length > 0);
 
 // Quiet when it passes, for the same reason parity_check.py is: a nightly log
 // nobody reads is a log that hides the one line that mattered.
