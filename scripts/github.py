@@ -172,10 +172,11 @@ class Client:
     def search(self, base_query):
         """Enumerate a search that may exceed GitHub's 1000-result ceiling.
 
-        The catalogue sat at 739 repositories in August 2026 and is growing,
+        The catalogue sat at 752 repositories in August 2026 and is growing,
         so the ceiling is a matter of when rather than whether. Splitting by
         star count keeps every bucket small; a bucket that still overflows is
-        split again by creation year.
+        split again by creation year. Nothing here truncates quietly: a bucket
+        that no split can bring under the cap raises instead.
         """
         total = self.count(base_query)
         self._log(f"  '{base_query}' -> {total} repos")
@@ -195,10 +196,32 @@ class Client:
                 yield from self._split_by_year(bucket)
 
     def _split_by_year(self, query):
+        """Last resort: one sub-query per creation year.
+
+        The first bucket is open-ended rather than starting at a fixed year.
+        A hard floor silently drops everything older than it, and this branch
+        only ever runs years from now, when nobody is watching the log.
+
+        A year that still overflows is not split further, because reaching one
+        would mean 900 repositories of one star count created in one calendar
+        year -- an ecosystem two orders of magnitude larger than this one.
+        Rather than carry a bisection that could never be tested, it fails and
+        says what to widen.
+        """
         self._log(f"  '{query}' still large, splitting by year")
-        for year in range(2017, time.gmtime().tm_year + 1):
-            sub = f"{query} created:{year}-01-01..{year}-12-31"
-            if self.count(sub):
+        spans = [("created:<2017-01-01", "pre-2017")]
+        spans += [(f"created:{y}-01-01..{y}-12-31", str(y))
+                  for y in range(2017, time.gmtime().tm_year + 1)]
+        for span, label in spans:
+            sub = f"{query} {span}"
+            found = self.count(sub)
+            if found > SEARCH_CAP:
+                raise RuntimeError(
+                    f"'{sub}' -> {found} repos, past the {SEARCH_CAP} cap with "
+                    "nothing left to split by. Widen the star ladder in "
+                    "Client.search() or split this year by month.")
+            if found:
+                self._log(f"    {label}: {found}")
                 yield from self._page_all(sub)
 
     # ------------------------------------------------------------------- files
