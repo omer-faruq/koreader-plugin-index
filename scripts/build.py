@@ -311,6 +311,60 @@ def collect_plugins(client, since=None):
 
 # ----------------------------------------------------------------------- output
 
+# The README carries the live numbers between these markers. That is worth
+# reading on its own, and it is also the heartbeat: GitHub disables a
+# scheduled workflow after 60 days without repository activity, and nothing
+# else here ever commits -- the index is published as a Pages artifact, never
+# checked in. A monthly rewrite of these four lines resets that clock with
+# thirty days to spare, and unlike a dummy commit it says something true.
+README_START = "<!-- index-status:start -->"
+README_END = "<!-- index-status:end -->"
+
+# Real newlines rather than escapes, so the block reads here the way it reads
+# in the README.
+STATUS_BLOCK = """{start}
+> [!TIP]
+> ### [Search the index &nbsp;&rarr;]({url}/)
+> **{plugins} plugins &middot; {patches} patches** across {repos} repositories.
+> Last full rebuild **{date}**, diffed nightly.
+"""
+
+
+def update_readme_status(counts, date, url=PAGES_BASE):
+    """Rewrite the status block in README.md. Full builds only.
+
+    Returns True when the file changed. Missing markers are not an error:
+    somebody may have taken the block out on purpose, and a rebuild is the
+    wrong place to put it back.
+    """
+    path = ROOT / "README.md"
+    if not path.exists():
+        return False
+    text = path.read_text(encoding="utf-8")
+    head, sep, rest = text.partition(README_START)
+    if not sep:
+        print("  README status markers missing, left alone")
+        return False
+    _, sep, tail = rest.partition(README_END)
+    if not sep:
+        print("  README end marker missing, left alone")
+        return False
+
+    block = STATUS_BLOCK.format(
+        start=README_START,
+        url=url,
+        plugins=counts["plugins"],
+        patches=counts["patches"],
+        repos=counts["patch_repos"],
+        date=date,
+    )
+    updated = head + block + README_END + tail
+    if updated == text:
+        return False
+    path.write_text(updated, encoding="utf-8")
+    return True
+
+
 def write_json(path, payload):
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
@@ -588,6 +642,12 @@ def main():
     print(f"  catalogue.html    ({catalogue_size/1024:.0f} KB)  robots.txt  sitemap.xml")
     print(f"  index.min.json    ({min_size/1024:.0f} KB, {len(device_entries)} entries)")
     print(f"  requests  {client.requests}  (rate limit left: {client.remaining})")
+
+    # Only on full runs: a nightly rewrite would be 365 commits a year saying
+    # the same thing, and the diff numbers are carried over rather than
+    # measured, so they are not the ones worth publishing.
+    if args.mode == "full" and update_readme_status(index["counts"], started[:10]):
+        print("  README.md status block updated")
     return 0
 
 

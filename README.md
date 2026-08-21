@@ -2,6 +2,13 @@
 
 [![Build index](https://github.com/omer-faruq/koreader-plugin-index/actions/workflows/build.yml/badge.svg)](https://github.com/omer-faruq/koreader-plugin-index/actions/workflows/build.yml?query=event%3Aschedule)
 
+<!-- index-status:start -->
+> [!TIP]
+> ### [Search the index &nbsp;&rarr;](https://omer-faruq.github.io/koreader-plugin-index/)
+> **752 plugins &middot; 452 patches** across 105 repositories.
+> Last full rebuild **2026-08-22**, diffed nightly.
+<!-- index-status:end -->
+
 A self-maintaining index of community KOReader plugins and user patches, and a
 search page built on it.
 
@@ -109,6 +116,20 @@ is deliberately not on the hour, which is the most contended slot. Three ways to
 A run that fails partway leaves the previous version up: the sanity check
 aborts publishing if either the plugin or the patch count drops by more than
 30%, rather than shipping a collapsed catalogue.
+
+## Keeping itself alive
+
+GitHub disables a scheduled workflow after 60 days without repository
+activity. Nothing in this pipeline commits — the index is published as a Pages
+artifact — so left alone, the repository would quietly stop rebuilding itself
+two months after the last hand edit.
+
+So the monthly full run writes its own counts and rebuild date into the
+`index-status` block at the top of this file and commits that. It is the one
+thing here that touches git: twelve commits a year, each one saying something
+a reader wants to know anyway, and the 60-day clock never gets within thirty
+days of expiring. Those numbers are generated — edit
+`update_readme_status()` in `scripts/build.py`, not the block itself.
 
 ## Status
 
