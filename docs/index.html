@@ -162,6 +162,18 @@ header { margin-bottom: 22px; position: relative; }
 h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
 .tagline { color: var(--muted); margin: 0 0 12px; }
 
+/* The one line on the page addressed to a particular reader rather than to
+   everyone, so it gets the accent rule to say so -- and nothing else. Louder
+   than this and it reads as an advertisement for a mode that costs money. */
+.welcome {
+  margin: 0 0 12px; padding: 2px 0 2px 10px; font-size: .88rem; color: var(--muted);
+  border-left: 2px solid var(--accent);
+}
+.welcome b { color: var(--text); font-weight: 600; }
+/* Right-to-left scripts need the border on the side the line starts from,
+   or it sits at the end of the sentence and reads as a stray mark. */
+.welcome[dir="rtl"] { padding: 2px 10px 2px 0; border-left: 0; border-right: 2px solid var(--accent); }
+
 /* The index is deliberately stale between nightly runs. Saying so turns a
    discrepancy against the live GitHub catalogue into transparency. */
 .freshness {
@@ -473,6 +485,10 @@ footer a { color: var(--accent); }
   <button id="themeToggle" title="Switch between light and dark" aria-label="Switch theme">🌙</button>
   <h1>KOReader Plugin Finder</h1>
   <p class="tagline">Describe what you want to do. Not what the plugin is called.</p>
+  <!-- Written by script, and only for a reader whose browser is not asking for
+       English. Empty in the markup so a page served to an English speaker has
+       nothing to hide, and so the line can carry its own lang and dir. -->
+  <p class="welcome" id="welcome" hidden></p>
   <div class="freshness" id="freshness">Loading index…</div>
 </header>
 
@@ -2265,6 +2281,123 @@ function renderFreshness() {
       paint();
     });
   });
+})();
+
+/* --------------------------------------------------------------- welcome */
+
+/* The catalogue is English and the keyword box scores against an English
+   index, so a reader who writes Turkish into it gets nothing and has no way to
+   know why. AI Mode already answers in whatever language the question was
+   asked in -- EXPAND_PROMPT detects it and SYSTEM_PROMPT is told not to
+   negotiate about it -- and this is the only thing on the page that says so.
+   One line, in their language, and nothing else translated: a fully localised
+   shell around English plugin descriptions would promise a page that does not
+   exist, and the search box would still silently fail on their words.
+
+   The list is KOReader's own: every locale in its language menu, plus the two
+   with complete l10n directories that the menu leaves out. Someone reading on
+   a Kobo in Georgian is exactly who this is for. */
+// Every line names the button as it is written on it. Translating "AI Mode"
+// into each language would leave the reader looking for a control that does
+// not exist: nothing else on this page is localised, least of all that button.
+const WELCOME = {
+  ar: "يمكنك كتابة سؤالك بالعربية — يجيب «AI Mode» بالعربية. الفهرس نفسه بالإنجليزية.",
+  bg: "Можете да зададете въпроса си на български — „AI Mode“ отговаря на български. Самият каталог е на английски.",
+  bn: "আপনি বাংলায় প্রশ্ন করতে পারেন — “AI Mode” বাংলায় উত্তর দেয়। ক্যাটালগটি ইংরেজিতে।",
+  ca: "Pots escriure la teva pregunta en català: «AI Mode» respon en català. El catàleg és en anglès.",
+  cs: "Můžete se zeptat česky — „AI Mode“ odpoví česky. Samotný katalog je v angličtině.",
+  da: "Du kan skrive dit spørgsmål på dansk — „AI Mode“ svarer på dansk. Selve kataloget er på engelsk.",
+  de: "Sie können Ihre Frage auf Deutsch stellen — „AI Mode“ antwortet auf Deutsch. Der Katalog selbst ist auf Englisch.",
+  el: "Μπορείτε να γράψετε την ερώτησή σας στα ελληνικά — το «AI Mode» απαντά στα ελληνικά. Ο ίδιος ο κατάλογος είναι στα αγγλικά.",
+  eo: "Vi povas skribi vian demandon en Esperanto — „AI Mode“ respondas en Esperanto. La katalogo mem estas en la angla.",
+  es: "Puedes escribir tu pregunta en español: «AI Mode» responde en español. El catálogo está en inglés.",
+  eu: "Zure galdera euskaraz idatz dezakezu: «AI Mode» euskaraz erantzuten du. Katalogoa bera ingelesez dago.",
+  fa: "می‌توانید پرسش خود را به فارسی بنویسید — «AI Mode» به فارسی پاسخ می‌دهد. خود فهرست به انگلیسی است.",
+  fi: "Voit kysyä suomeksi — ”AI Mode” vastaa suomeksi. Itse luettelo on englanniksi.",
+  fr: "Vous pouvez poser votre question en français — « AI Mode » répond en français. Le catalogue lui-même est en anglais.",
+  ga: "Is féidir leat do cheist a scríobh i nGaeilge — freagraíonn “AI Mode” i nGaeilge. Tá an chatalóg féin i mBéarla.",
+  gl: "Podes escribir a túa pregunta en galego: «AI Mode» responde en galego. O catálogo está en inglés.",
+  he: "אפשר לכתוב את השאלה בעברית — «AI Mode» עונה בעברית. הקטלוג עצמו באנגלית.",
+  hi: "आप अपना सवाल हिन्दी में लिख सकते हैं — “AI Mode” हिन्दी में जवाब देता है। कैटलॉग अंग्रेज़ी में है।",
+  hr: "Pitanje možete napisati na hrvatskom — „AI Mode“ odgovara na hrvatskom. Sam katalog je na engleskom.",
+  hu: "Kérdését magyarul is felteheti — az „AI Mode” magyarul válaszol. Maga a katalógus angol nyelvű.",
+  id: "Anda dapat menulis pertanyaan dalam bahasa Indonesia — “AI Mode” menjawab dalam bahasa Indonesia. Katalognya sendiri berbahasa Inggris.",
+  it: "Puoi scrivere la tua domanda in italiano: «AI Mode» risponde in italiano. Il catalogo è in inglese.",
+  ja: "日本語で質問できます。「AI Mode」は日本語で回答します。カタログ自体は英語です。",
+  ka: "შეკითხვა შეგიძლიათ ქართულად დაწეროთ — „AI Mode“ ქართულად პასუხობს. კატალოგი ინგლისურადაა.",
+  kk: "Сұрағыңызды қазақша жазуға болады — «AI Mode» қазақша жауап береді. Каталогтың өзі ағылшынша.",
+  ko: "한국어로 질문할 수 있습니다. ‘AI Mode’는 한국어로 답변합니다. 카탈로그 자체는 영어입니다.",
+  lt: "Klausimą galite parašyti lietuviškai — „AI Mode“ atsako lietuviškai. Pats katalogas yra anglų kalba.",
+  lv: "Jautājumu varat uzrakstīt latviski — „AI Mode“ atbild latviski. Pats katalogs ir angļu valodā.",
+  ml: "നിങ്ങൾക്ക് മലയാളത്തിൽ ചോദിക്കാം — “AI Mode” മലയാളത്തിൽ മറുപടി നൽകുന്നു. കാറ്റലോഗ് ഇംഗ്ലീഷിലാണ്.",
+  nb: "Du kan skrive spørsmålet på norsk — «AI Mode» svarer på norsk. Selve katalogen er på engelsk.",
+  nl: "Je kunt je vraag in het Nederlands stellen — ‘AI Mode’ antwoordt in het Nederlands. De catalogus zelf is Engels.",
+  pl: "Możesz zadać pytanie po polsku — „AI Mode” odpowie po polsku. Sam katalog jest po angielsku.",
+  pt: "Pode escrever a sua pergunta em português — «AI Mode» responde em português. O catálogo está em inglês.",
+  "pt-br": "Você pode escrever sua pergunta em português — “AI Mode” responde em português. O catálogo está em inglês.",
+  ro: "Puteți scrie întrebarea în română — „AI Mode” răspunde în română. Catalogul în sine este în engleză.",
+  ru: "Вы можете задать вопрос по-русски — «AI Mode» ответит по-русски. Сам каталог на английском.",
+  sk: "Môžete sa opýtať po slovensky — „AI Mode“ odpovie po slovensky. Samotný katalóg je v angličtine.",
+  sl: "Vprašanje lahko napišete v slovenščini — »AI Mode« odgovori v slovenščini. Katalog sam je v angleščini.",
+  sr: "Питање можете написати на српском — „AI Mode“ одговара на српском. Сам каталог је на енглеском.",
+  sv: "Du kan skriva din fråga på svenska — ”AI Mode” svarar på svenska. Själva katalogen är på engelska.",
+  th: "คุณสามารถถามเป็นภาษาไทยได้ — “AI Mode” จะตอบเป็นภาษาไทย แคตตาล็อกเป็นภาษาอังกฤษ",
+  tr: "Sorunuzu Türkçe yazabilirsiniz — “AI Mode” Türkçe yanıtlar. Katalog İngilizcedir.",
+  uk: "Ви можете поставити запитання українською — «AI Mode» відповість українською. Сам каталог англійською.",
+  vi: "Bạn có thể đặt câu hỏi bằng tiếng Việt — “AI Mode” trả lời bằng tiếng Việt. Bản thân danh mục là tiếng Anh.",
+  zh: "你可以用中文提问 —— 「AI Mode」会用中文回答。目录本身是英文的。",
+  "zh-tw": "你可以用中文提問 —— 「AI Mode」會用中文回答。目錄本身是英文的。"
+};
+
+// Written RTL, so the line needs dir set or the em dash and the Latin "AI"
+// land on the wrong side of it. Same set as KOReader's own, narrowed to the
+// languages above.
+const WELCOME_RTL = new Set(["ar", "fa", "he"]);
+
+// Regional tags that are a different language here, not a different accent.
+// Everything else falls back to its base: pt-PT and pt-AO share a line, and
+// de-AT reads the German one without needing an entry of its own.
+const WELCOME_ALIAS = {
+  "zh-hant": "zh-tw", "zh-hk": "zh-tw", "zh-mo": "zh-tw",
+  "zh-hans": "zh", "zh-sg": "zh",
+  // Nynorsk and the unspecified "no" both read Bokmål here rather than
+  // nothing at all; KOReader ships one Norwegian translation for the same
+  // reason.
+  nn: "nb", no: "nb",
+  // Serbo-Croatian tags that browsers still emit.
+  sh: "hr", iw: "he", in: "id", ji: "he"
+};
+
+function welcomeFor(tags) {
+  for (const raw of tags) {
+    const tag = String(raw || "").toLowerCase();
+    if (!tag) continue;
+    // English readers are already being spoken to in their own language by
+    // every other word on the page.
+    const base = tag.split("-")[0];
+    if (base === "en") return null;
+    for (const key of [WELCOME_ALIAS[tag], tag, WELCOME_ALIAS[base], base]) {
+      if (key && WELCOME[key]) return { lang: key, text: WELCOME[key] };
+    }
+  }
+  return null;
+}
+
+// Not inside boot(): a reader whose index failed to load still deserves to be
+// told that the thing behind the button speaks their language.
+(() => {
+  // navigator.languages is the ordered preference list; navigator.language is
+  // only the first of it, and some browsers still ship one without the other.
+  const tags = (navigator.languages && navigator.languages.length)
+    ? navigator.languages : [navigator.language];
+  const hit = welcomeFor(tags || []);
+  if (!hit) return;
+  const el = document.getElementById("welcome");
+  if (!el) return;
+  el.lang = hit.lang;
+  if (WELCOME_RTL.has(hit.lang.split("-")[0])) el.dir = "rtl";
+  el.textContent = hit.text;
+  el.hidden = false;
 })();
 
 // Keeps the address bar honest about the whole view -- mode, tab, query and

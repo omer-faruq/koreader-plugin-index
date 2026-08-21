@@ -74,6 +74,12 @@ jobs:
       - name: AI Mode flow
         run: node tests/ai_flow.mjs
 
+      # 46 lines nobody here can proofread by reading the page, shown on the
+      # strength of a header. Coverage and direction are checkable; the prose
+      # is not, so at least these are.
+      - name: Welcome line
+        run: node tests/welcome.mjs
+
       # Published as an artifact rather than committed. Committing generated
       # JSON every night would bloat the history, and any commit here would
       # register as a release to anything watching the repository.

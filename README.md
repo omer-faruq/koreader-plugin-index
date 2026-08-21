@@ -57,6 +57,7 @@ Running cost is zero: Actions and Pages are free for public repositories, and
 | `curation.toml` | **The only hand-written file.** |
 | `tests/queries.toml` | Known question/answer pairs; the build fails if ranking regresses. |
 | `tests/ai_flow.mjs` | Drives AI Mode against a scripted model: what each question costs in requests, and what survives a round that fails. |
+| `tests/welcome.mjs` | The one localised line: that every locale KOReader ships reaches one, and that an English reader gets none. |
 | `SCHEMA.md` | The `index.json` contract. |
 
 ## Curation
