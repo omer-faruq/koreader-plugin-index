@@ -361,7 +361,7 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
    sees a form demanding an API key and no evidence that anything else is here.
    The header button is one exit; this is the one that says what is behind it,
    which is the part that was missing. */
-.ai-escape { font-size: .85rem; color: var(--muted); margin: 14px 0 0; }
+.ai-escape, .ai-again { font-size: .85rem; color: var(--muted); margin: 14px 0 0; }
 .sheet-wide { max-width: 620px; }
 .share-opts { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 12px; font-size: .85rem; }
 .share-opts label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
@@ -1020,6 +1020,20 @@ const RETRY_FOLLOWUP =
   + "already chose are in `already_found` and are kept. Add only candidates that beat them "
   + "or answer a part of the question they miss, and score every pick on the same scale.";
 
+// Stage one again, for a reader who has an answer and does not believe it.
+// The model that wrote the first search words is the one being asked for more,
+// and left to itself it returns the same ideas in different clothes -- hence
+// `tried`, and hence "another angle" rather than "more terms".
+const ANOTHER_ANGLE_PROMPT = [
+  "A search for KOReader plugins has already been run with the words in `tried`,",
+  "and the reader was not satisfied with what it found.",
+  "Reply with English search words for the same question approached differently:",
+  "the underlying problem, the machinery it would be built on, what the feature is",
+  "called elsewhere. No term may be a word in `tried` or a rephrasing of one.",
+  "Never 'koreader', 'plugin' or 'ereader'. Four to eight terms, no explanation.",
+  'JSON only: {"terms":["..."]}'
+].join(" ");
+
 const PATCH_RULES = [
   "These are user patches, not plugins: each edits KOReader's own behaviour and",
   "can break when KOReader updates. Say what a patch does, and prefer the ones",
@@ -1055,8 +1069,12 @@ const SYSTEM_PROMPT = [
   // this instruction gets a concrete language.
   "Write every reason in {LANGUAGE}. This is not negotiable, whatever language",
   "the plugin descriptions are written in.",
+  // The shape follows the rule. Left whole, it holds out a `search_again`
+  // field on a round that cannot act on one -- which is the thing withdrawing
+  // RETRY_RULE is meant to prevent, and a model offered a key tends to fill it.
+  // Not an edge case either: a round the reader asked for always runs this way.
   'Reply with JSON only: {"picks":[{"id":"owner/repo","fit":88,"why":"one short sentence"}],'
-  + '"search_again":["term"],"note":"optional one sentence"}'
+  + '{AGAIN}"note":"optional one sentence"}'
 ].join(" ");
 
 const SHORTLIST_FLOOR = 10;
@@ -1272,6 +1290,12 @@ async function expandQuery(cfg, question) {
   }
 }
 
+// What the current question has cost so far: the candidates weighed, the picks
+// made and the words spent getting them. Held between calls so a round the
+// reader asks for adds to the answer instead of replacing it. A new question
+// throws it away.
+let aiSession = null;
+
 async function runAI() {
   const question = $("aiQuestion").value.trim();
   const cfg = aiConfig();
@@ -1295,46 +1319,76 @@ async function runAI() {
   const language = (expanded && expanded.language) || "the language of the question";
   const retrievalQuery = terms ? terms.join(" ") + " " + question : question;
 
-  let candidates = shortlistFor(retrievalQuery);
+  const candidates = shortlistFor(retrievalQuery);
   if (!candidates.length) {
     $("aiOut").innerHTML = `<div class="note info"><b>Nothing to work with</b>
       The catalogue came back empty. Reload the page and try again.</div>`;
     return;
   }
 
-  // Every candidate the model has seen, across every round -- picks are
-  // validated against this, so a second round cannot invalidate a first-round
-  // choice by replacing the shortlist under it.
-  const byId = new Map();
-  const merged = new Map();
-  const searchedAgainFor = [];
-  const budget = tuning().retries;
-  // Counted after a call returns, not before it goes out. A round that failed
-  // retrieved candidates the model never saw, and reporting them as weighed
-  // would overstate what the answer rests on.
-  let result = null, note = "", weighed = 0;
+  aiSession = {
+    question, language, retrievalQuery, terms: terms || [],
+    // The catalogue this was asked of. Closing the dialog, switching tab and
+    // reopening leaves the old answer on screen, and another round against the
+    // other catalogue would weigh patches into a question about plugins.
+    tab: state.tab,
+    // Every candidate the model has seen, across every round -- picks are
+    // validated against this, so a second round cannot invalidate a
+    // first-round choice by replacing the shortlist under it.
+    byId: new Map(),
+    merged: new Map(),
+    searchedAgainFor: [],
+    // Every word retrieval has already been spent on, round zero included. A
+    // round the reader asks for is asked for words unlike these, and stage
+    // one's are the ones a dissatisfied reader most wants moved away from.
+    tried: (terms || []).slice(),
+    // Counted after a call returns, not before it goes out. A round that
+    // failed retrieved candidates the model never saw, and reporting them as
+    // weighed would overstate what the answer rests on.
+    weighed: 0, note: "", failed: null
+  };
+  if (await aiRounds(cfg, aiSession, candidates, tuning().retries)) renderAnswer(aiSession);
+}
+
+// The rounds themselves, split out of runAI because the reader can ask for
+// another one after the answer is on screen: a later round has to add to what
+// the earlier ones found rather than start again beside it. Returns false
+// having already written a failure to the page, true otherwise -- including
+// when a round failed but earlier ones left something worth showing.
+async function aiRounds(cfg, session, candidates, budget) {
+  const { byId, merged, searchedAgainFor } = session;
+  let result = null;
 
   for (let round = 0; ; round++) {
-    candidates.forEach(e => byId.set(e.id, e));
-    $("aiOut").innerHTML = `<div class="state">${round
+    // "Again" is a fact about the session, not about this call. A round the
+    // reader asked for is the first of its call and still the second thing
+    // the model has been shown.
+    const more = round > 0 || session.weighed > 0;
+    $("aiOut").innerHTML = `<div class="state">${more
       ? `Looking again — weighing ${candidates.length} more candidates…`
       : `Weighing ${candidates.length} candidates…`}</div>`;
 
+    // Confusions are named between entries on screen together, so this round's
+    // shortlist counts -- but it does not join `byId` until the model has
+    // actually been shown it. A call that fails must not quietly retire
+    // candidates nobody weighed.
+    const showing = new Set([...byId.keys(), ...candidates.map(e => e.id)]);
     const relevant = (state.index.distinctions || []).filter(d =>
-      (d.between || []).filter(x => byId.has(x)).length >= 2);
+      (d.between || []).filter(x => showing.has(x)).length >= 2);
     const roundsLeft = budget - round;
 
     try {
       const base = SYSTEM_PROMPT
         .replace("{PICKS}", String(tuning().picks))
-        .replace("{LANGUAGE}", language)
+        .replace("{LANGUAGE}", session.language)
         // Withdrawn once the budget is spent. Left in, a model asks for a
         // search that will not happen and words its answer as provisional.
-        .replace("{RETRY}", roundsLeft > 0 ? RETRY_RULE : "");
+        .replace("{RETRY}", roundsLeft > 0 ? RETRY_RULE : "")
+        .replace("{AGAIN}", roundsLeft > 0 ? '"search_again":["term"],' : "");
       let system = state.tab === "patches" ? base + " " + PATCH_RULES : base;
-      if (round) system += " " + RETRY_FOLLOWUP;
+      if (more) system += " " + RETRY_FOLLOWUP;
       result = await callModel(cfg, system, JSON.stringify({
-        question,
+        question: session.question,
         looking_for: state.tab === "patches" ? "user patches" : "plugins",
         candidates: candidates.map(compact),
         ...(merged.size ? { already_found: [...merged.values()]
@@ -1342,19 +1396,21 @@ async function runAI() {
         known_confusions: relevant.map(d => ({ between: d.between, note: d.say }))
       }));
     } catch (err) {
-      // A failed second round keeps the first round's answer: it is a better
-      // outcome than replacing results the reader can already see with an
-      // error about a search they never asked for.
-      if (merged.size) { searchedAgainFor.pop(); break; }
+      // A failed later round keeps the earlier rounds' answer: better than
+      // replacing results the reader can already see with an error. It is
+      // recorded rather than swallowed, though -- the request was paid for
+      // with their key, and one they asked for by name cannot fail in silence.
+      if (merged.size) { searchedAgainFor.pop(); session.failed = describeFailure(err); break; }
       // Same diagnosis as the settings test, so a failure reads the same way
       // wherever it surfaces.
       const [what, detail] = describeFailure(err);
       $("aiOut").innerHTML =
         `<div class="note"><b>${esc(what)}</b>${esc(detail)}</div>`;
-      return;
+      return false;
     }
 
-    weighed += candidates.length;
+    session.weighed += candidates.length;
+    candidates.forEach(e => byId.set(e.id, e));
 
     for (const p of result.picks || []) {
       if (!byId.has(p.id)) continue;
@@ -1370,72 +1426,160 @@ async function runAI() {
                            seq: kept ? kept.seq : seq });
       }
     }
-    if (result.note) note = result.note;
+    if (result.note) session.note = result.note;
 
     const again = searchTerms(result.search_again || [], 8);
     if (!again.length || roundsLeft <= 0) break;
 
-    const next = shortlistFor(again.join(" ") + " " + question)
+    const next = shortlistFor(again.join(" ") + " " + session.question)
       .filter(e => !byId.has(e.id));
     // Nothing new to show it. Asking the same question of the same entries
     // would spend a request to receive the same answer.
     if (!next.length) break;
     searchedAgainFor.push(again);
+    session.tried.push(...again);
     candidates = next;
   }
+  return true;
+}
 
+// Never a permanent switcher. A tab control sitting in here would let a
+// question written about plugins be answered with core patches, which are a
+// different proposition entirely -- this appears only once this catalogue has
+// been shown to hold nothing better.
+function otherCatalogueNote() {
+  const other = state.tab === "patches" ? "plugins" : "patches";
+  return `<div class="note info"><b>Try the other catalogue?</b>
+    ${other === "patches"
+      ? `There are also user patches — smaller changes to KOReader's own behaviour,
+         which can break when it updates.`
+      : `There are also plugins, which add features without changing KOReader itself
+         and are the safer place to look first.`}
+    <button class="linkish" id="aiOtherTab">Ask the same question about ${other}</button></div>`;
+}
+
+function bindOtherCatalogue() {
+  if (!$("aiOtherTab")) return;
+  $("aiOtherTab").addEventListener("click", async () => {
+    const other = state.tab === "patches" ? "plugins" : "patches";
+    await switchTabRef(other);
+    $("aiHeading").textContent = other === "patches"
+      ? "Describe what you need — searching patches"
+      : "Describe what you need";
+    $("browseView").hidden = true;
+    $("aiView").hidden = false;
+    runAI();
+  });
+}
+
+// The manual counterpart of `search_again`. That one fires only when the model
+// asks for it, so a model satisfied with a thin answer ends the search over
+// the reader's head. This is how they say otherwise without retyping the
+// question and throwing away everything already weighed.
+function againLine(session) {
+  if (session.tab !== state.tab) return "";
+  if (session.byId.size >= aiPool().length) {
+    return `<div class="ai-again">Every entry in scope has now been weighed
+      against this question.</div>`;
+  }
+  return `<div class="ai-again">Not what you meant?
+    <button class="linkish" id="aiAgain">Look again with different words</button>
+    — one more search, from another angle, over entries not yet seen.</div>`;
+}
+
+function bindAgain(session) {
+  if (!$("aiAgain")) return;
+  $("aiAgain").addEventListener("click", () => lookAgain(session));
+}
+
+// Two requests, the same as a first ask: one to find another angle, one to
+// weigh what it retrieves.
+async function lookAgain(session) {
+  const cfg = aiConfig();
+  if (!cfg || !cfg.key) { $("aiPanel").hidden = false; return; }
+  // The answer is about to stop being the one the shared link described.
+  state.sharedHash = null;
+  $("aiOut").innerHTML = `<div class="state">Looking for another angle…</div>`;
+
+  let fresh = [];
+  try {
+    const out = await callModel(cfg, ANOTHER_ANGLE_PROMPT,
+      JSON.stringify({ question: session.question, tried: session.tried }));
+    // Filtered here as well as forbidden in the prompt: a model that ignores
+    // `tried` would otherwise retrieve the shortlist already on screen.
+    fresh = searchTerms(out.terms || [], 8).filter(w => !session.tried.includes(w));
+  } catch (err) {
+    session.failed = describeFailure(err);
+    renderAnswer(session);
+    return;
+  }
+  if (!fresh.length) {
+    session.failed = ["No other angle to try",
+      "The model returned only words this search has already used."];
+    renderAnswer(session);
+    return;
+  }
+
+  const next = shortlistFor(fresh.join(" ") + " " + session.question)
+    .filter(e => !session.byId.has(e.id));
+  if (!next.length) { renderAnswer(session); return; }
+
+  session.searchedAgainFor.push(fresh);
+  session.tried.push(...fresh);
+  // Budget zero: the reader asked for one round, so one round is what this is.
+  // It also withdraws RETRY_RULE, so the model cannot chain automatic searches
+  // off a manual one and spend somebody's key on rounds nobody asked for.
+  if (await aiRounds(cfg, session, next, 0)) renderAnswer(session);
+}
+
+function renderAnswer(session) {
+  const { byId, merged, searchedAgainFor, terms } = session;
   // Sorted here rather than taken as given. A model that ignores `fit` or
   // returns the same number for everything falls back to the order it replied
   // in, which is what this used to trust unconditionally.
   const picks = [...merged.values()]
     .sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || a.seq - b.seq)
     .slice(0, tuning().picks);
+
+  // Shown once and cleared: it describes the round just attempted, not the
+  // answer, and must not reappear underneath the next one.
+  const failed = session.failed;
+  session.failed = null;
+  const failNote = failed
+    ? `<div class="note"><b>${esc(failed[0])}</b>${esc(failed[1])} Below is what
+        the earlier rounds found.</div>`
+    : "";
+
   if (!picks.length) {
-    // The one moment switching catalogues is the right suggestion. A permanent
-    // tab switcher in here would let a question written about plugins be
-    // answered with core patches, which are a different proposition entirely --
-    // this offers it once, having established that nothing else fits.
-    const other = state.tab === "patches" ? "plugins" : "patches";
-    const count = (other === "patches" ? state.index.patches : state.index.plugins).length
-      || (state.index.counts || {}).patches || 0;
-    $("aiOut").innerHTML =
+    $("aiOut").innerHTML = failNote +
       `<div class="note info"><b>Nothing in the shortlist fits</b>${
-        esc(note || "The model found no candidate that actually does this.")}${
+        esc(session.note || "The model found no candidate that actually does this.")}${
         searchedAgainFor.length
           ? ` It searched again for ${esc(searchedAgainFor.flat().join(", "))} and still found nothing.`
           : ""}</div>` +
-      `<div class="note info"><b>Try the other catalogue?</b>
-        ${other === "patches"
-          ? `There are also user patches — smaller changes to KOReader's own behaviour,
-             which can break when it updates.`
-          : `There are also plugins, which add features without changing KOReader itself
-             and are the safer place to look first.`}
-        <button class="linkish" id="aiOtherTab">Ask the same question about ${other}</button></div>`;
-    $("aiOtherTab").addEventListener("click", async () => {
-      await switchTabRef(other);
-      $("aiHeading").textContent = other === "patches"
-        ? "Describe what you need — searching patches"
-        : "Describe what you need";
-      $("browseView").hidden = true;
-      $("aiView").hidden = false;
-      runAI();
-    });
+      againLine(session) + otherCatalogueNote();
+    bindAgain(session);
+    bindOtherCatalogue();
     return;
   }
 
-  const tokens = tokenise(retrievalQuery);
+  const tokens = tokenise(session.retrievalQuery);
   // The extra searches are named, not hidden. They cost the reader's own key,
   // and seeing which words found an answer is half of what makes the answer
   // trustworthy.
   const searchLine = [
-    terms ? `searched for ${terms.slice(0, 6).join(", ")}` : "",
+    terms.length ? `searched for ${terms.slice(0, 6).join(", ")}` : "",
     ...searchedAgainFor.map(t => `then for ${t.slice(0, 6).join(", ")}`)
   ].filter(Boolean).join(" · ");
-  $("aiOut").innerHTML =
-    `<div class="ai-head"><span class="section-title">${picks.length} of ${weighed} candidates fit${
+  // Under 60 is what the prompt itself calls partial or adjacent. Four
+  // adjacent answers leave a reader roughly where no answer would, so the
+  // offer an empty result makes is worth making here too.
+  const weak = picks[0].score != null && picks[0].score < 60;
+  $("aiOut").innerHTML = failNote +
+    `<div class="ai-head"><span class="section-title">${picks.length} of ${session.weighed} candidates fit${
       searchLine ? ` · ${esc(searchLine)}` : ""}</span>` +
     `<button class="btn ghost" id="shareOpen">Share</button></div>` +
-    (note ? `<div class="note info"><b>Note</b>${esc(note)}</div>` : "") +
+    (session.note ? `<div class="note info"><b>Note</b>${esc(session.note)}</div>` : "") +
     picks.map((p, i) => {
       const entry = byId.get(p.id);
       return `<div class="ai-result"><span class="ai-rank">${
@@ -1443,10 +1587,14 @@ async function runAI() {
         p.score != null ? ` · fit ${Math.round(p.score)}` : ""}</span>${
         card(entry, tokens)
           .replace("</article>", `<p class="ai-why">${esc(p.why || "")}</p></article>`)}</div>`;
-    }).join("");
+    }).join("") +
+    againLine(session) +
+    (weak ? otherCatalogueNote() : "");
   bindReadme($("aiOut"), picks.map(p => byId.get(p.id)));
+  bindAgain(session);
+  if (weak) bindOtherCatalogue();
   state.answer = {
-    question, tab: state.tab, note,
+    question: session.question, tab: session.tab, note: session.note,
     model: (aiConfig() || {}).model || (PROVIDERS[(aiConfig() || {}).provider] || {}).model || "",
     picks: picks.map(p => ({ id: p.id, fit: p.score, why: p.why }))
   };
@@ -1487,7 +1635,11 @@ function shareWarnings(answer) {
 // the rest; a numbered list reads as intended everywhere.
 function shareTextFor(answer, opts) {
   const site = location.origin + location.pathname;
-  const byId = new Map((state.tab === "patches" ? state.index.patches : state.index.plugins)
+  // The answer's own catalogue, not whichever tab is showing now. An answer
+  // outlives the tab it was asked from -- read it, close the dialog, look at
+  // the other tab, come back to share it -- and looking its picks up in the
+  // wrong catalogue dropped every URL out of the shared text.
+  const byId = new Map((answer.tab === "patches" ? state.index.patches : state.index.plugins)
     .map(e => [e.id, e]));
   const lines = [
     `KOReader Plugin Finder — "${answer.question}"`,
@@ -1531,6 +1683,9 @@ function shareUrlFor(answer) {
 // such -- presenting it as this site's recommendation would be the one way
 // this feature could mislead.
 function renderShared(payload) {
+  // Somebody else's answer, with none of the state behind it -- no candidates
+  // weighed here, no words spent. There is nothing for another round to add to.
+  aiSession = null;
   const source = state.tab === "patches" ? state.index.patches : state.index.plugins;
   const byId = new Map(source.map(e => [e.id, e]));
   const picks = (payload.p || [])
@@ -2346,7 +2501,8 @@ function setupAI() {
     $("tuneCost").textContent =
       `About ${tokens.toLocaleString()} tokens a question — a fraction of a cent on most `
       + `providers${t.retries ? `, and up to ${t.retries + 1}× that on a question that `
-        + `sends the model looking twice` : ""}.`;
+        + `sends the model looking twice` : ""}. Looking again after an answer `
+      + `adds one more each time.`;
   };
   const writeTuning = () => {
     const next = {};

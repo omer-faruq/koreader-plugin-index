@@ -68,6 +68,12 @@ jobs:
       - name: Ranking parity
         run: python tests/parity_check.py
 
+      # AI Mode spends the reader's own API key, and how much of it goes on a
+      # question is decided entirely in the page. Nothing else here can see
+      # that, so it is driven against a scripted model.
+      - name: AI Mode flow
+        run: node tests/ai_flow.mjs
+
       # Published as an artifact rather than committed. Committing generated
       # JSON every night would bloat the history, and any commit here would
       # register as a release to anything watching the repository.
