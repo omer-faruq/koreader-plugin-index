@@ -77,7 +77,20 @@ check("case does not matter", lang("TR-tr") === "tr", String(lang("TR-tr")));
 
 // Content, not just coverage.
 const codes = Object.keys(WELCOME);
-check("no line is empty", codes.every(c => WELCOME[c].trim().length > 20));
+// A header line, so it has to stay one. Long enough to carry both halves,
+// short enough not to wrap into a paragraph above the search bar.
+const lengths = codes.filter(c => WELCOME[c].length < 25 || WELCOME[c].length > 120);
+check("every line is a line", !lengths.length,
+  lengths.map(c => `${c}:${WELCOME[c].length}`).join(", "));
+
+// The line sits two elements above a keyword box that scores against an
+// English index. One that opens with "you can write in your own language" is
+// an invitation to type into the one control on the page that would silently
+// return nothing, so the button has to come first and the box has to be ruled
+// out. Only the first half is checkable here; the second is prose.
+const buried = codes.filter(c => WELCOME[c].indexOf("AI Mode") > 20);
+check("every line leads with the button", !buried.length,
+  buried.map(c => `${c}@${WELCOME[c].indexOf("AI Mode")}`).join(", "));
 // The button reads "AI Mode" and nothing else on the page is translated, so a
 // line that renders it as "le mode IA" leaves the reader hunting for a control
 // that is not there.
