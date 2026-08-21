@@ -86,11 +86,44 @@ check("every line is a line", !lengths.length,
 // The line sits two elements above a keyword box that scores against an
 // English index. One that opens with "you can write in your own language" is
 // an invitation to type into the one control on the page that would silently
-// return nothing, so the button has to come first and the box has to be ruled
-// out. Only the first half is checkable here; the second is prose.
-const buried = codes.filter(c => WELCOME[c].indexOf("AI Mode") > 20);
-check("every line leads with the button", !buried.length,
-  buried.map(c => `${c}@${WELCOME[c].indexOf("AI Mode")}`).join(", "));
+// return nothing, so the button has to be named before the clause about
+// language, and the box has to be ruled out after it. Both halves are worth
+// pinning down; what the second one says is prose, but that it is there is
+// not.
+//
+// The sentence-enders of the scripts in the table. Thai writes none of them
+// -- its sentence break is a space, and which of a Thai line's spaces is the
+// break is not something this file can tell -- so it is named below as the
+// one line whose halves cannot be separated here.
+const STOP = /[.。।!?]/;
+const UNSPLIT = new Set(["th"]);
+const halves = line => {
+  const at = line.search(STOP);
+  return at < 0 ? null : [line.slice(0, at), line.slice(at + 1).trim()];
+};
+// Where a clause ends, in the punctuation of every script here.
+const CLAUSE = /[,，、;；:：]/;
+const opening = line => (halves(line) || [line])[0].split(CLAUSE)[0];
+
+// The button has to be named in the opening clause -- before the line says
+// anything about language, since everything it says about language is true of
+// the button and false of the box. This was once "AI Mode within twenty
+// characters", which measured the grammar of the language instead: Irish has
+// to open with its verb and Greek with its article, and a language needing a
+// longer run-up would have failed while still naming the button first. A
+// clause is the unit that was meant; a character count only stood in for it,
+// and let "you can write in your own language, so AI Mode ..." through.
+const buried = codes.filter(c => !opening(WELCOME[c]).includes("AI Mode"));
+check("every line names the button in its opening clause", !buried.length,
+  buried.join(", "));
+
+// A line that stops after "AI Mode answers in the language you ask in" has
+// told the reader their language works here and left them facing a box where
+// it does not. The half that rules the box out is the half the line exists
+// for, and a line cannot lose it quietly.
+const halfOnly = codes.filter(c => !UNSPLIT.has(c) && !(halves(WELCOME[c]) || [])[1]);
+check("every line keeps the half that rules the box out", !halfOnly.length,
+  halfOnly.join(", "));
 // The button reads "AI Mode" and nothing else on the page is translated, so a
 // line that renders it as "le mode IA" leaves the reader hunting for a control
 // that is not there.
