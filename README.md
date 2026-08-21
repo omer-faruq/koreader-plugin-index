@@ -64,6 +64,7 @@ Running cost is zero: Actions and Pages are free for public repositories, and
 | `curation.toml` | **The only hand-written file.** |
 | `tests/queries.toml` | Known question/answer pairs; the build fails if ranking regresses. |
 | `tests/ai_flow.mjs` | Drives AI Mode against a scripted model: what each question costs in requests, and what survives a round that fails. |
+| `tests/share_list.mjs` | The text behind the Share button: that the ticked fields are the fields that go out, and that the list says how it was narrowed. |
 | `tests/welcome.mjs` | The one localised line: that every locale KOReader ships reaches one, and that an English reader gets none. |
 | `SCHEMA.md` | The `index.json` contract. |
 
@@ -143,4 +144,6 @@ days of expiring. Those numbers are generated — edit
       catalogue is readable and indexable without JavaScript
 - [x] Creation and update dates, and orders to browse by them
 - [x] An AI answer can be shared as text or as a link that carries it
+- [x] Any result list can be shared as text — how far down to cut, and
+      which fields to say, chosen by whoever is posting it
 - [ ] On-device search in the AppStore plugin

@@ -313,6 +313,9 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
   font-size: .85rem; color: var(--muted);
 }
 .toolbar label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+/* The count and the button that shares what it counted, kept together at the
+   end of the row: the number is what the button is about. */
+.toolbar-end { display: inline-flex; align-items: center; gap: 12px; margin-left: auto; }
 .sortwrap select {
   font: inherit; color: var(--text); background: var(--surface);
   border: 1px solid var(--border); border-radius: 7px; padding: 2px 6px;
@@ -390,7 +393,15 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
 .sheet-wide { max-width: 620px; }
 .share-opts { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 12px; font-size: .85rem; }
 .share-opts label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
-#shareText {
+/* How many rows go out is the first decision and which columns the second, so
+   the number sits above the field list rather than among it. */
+.share-count { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; font-size: .85rem; }
+.share-count input {
+  width: 86px; padding: 6px 9px; font: inherit; font-size: .9rem; color: var(--text);
+  background: var(--bg); border: 1px solid var(--border); border-radius: 7px;
+}
+.share-count .field-hint { flex: 1 1 100%; margin: 0; }
+#shareText, #listShareText {
   width: 100%; padding: 12px 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: .8rem; line-height: 1.5; color: var(--text); background: var(--bg);
   border: 1px solid var(--border); border-radius: 10px; resize: vertical;
@@ -533,7 +544,14 @@ footer a { color: var(--accent); }
       <option value="new" id="sortNew">newest</option>
     </select>
   </label>
-  <span id="count"></span>
+  <span class="toolbar-end">
+    <span id="count"></span>
+    <!-- Hidden until there is something to share, and never shown over an
+         empty list: a button that can only report "nothing matched" is worse
+         than no button. -->
+    <button class="btn ghost" id="listShareOpen" hidden
+            title="Copy these results as text">Share list</button>
+  </span>
 </div>
 
 <div id="notes"></div>
@@ -621,6 +639,46 @@ footer a { color: var(--accent); }
 
     <p class="sheet-foot">Nothing is uploaded. Both links carry their content in
       the address itself, which is also why the second one is long.</p>
+  </div>
+</div>
+
+<!-- The other half of sharing. The dialog above sends an answer a model
+     wrote; this one sends the list this page's own ranking produced, which is
+     what someone answering a forum thread actually has in front of them.
+     Whoever posts it chooses how far down to cut and how much to say about
+     each entry, because a reply is not a database dump. -->
+<div class="overlay" id="listShareModal" hidden>
+  <div class="sheet sheet-wide">
+    <div class="modal-head">
+      <h2>Share these results</h2>
+      <button class="btn-x" id="listShareClose" aria-label="Close">&times;</button>
+    </div>
+
+    <div class="share-count">
+      <label for="listShareCount">How many, counted from the top</label>
+      <input id="listShareCount" type="number" min="1" step="1">
+      <span class="field-hint" id="listShareScope"></span>
+    </div>
+
+    <div class="share-opts" id="listShareOpts">
+      <label><input type="checkbox" data-lshare="purpose" checked> What each one does</label>
+      <label><input type="checkbox" data-lshare="url" checked> Link to the repository</label>
+      <label><input type="checkbox" data-lshare="stars" checked> Stars</label>
+      <label><input type="checkbox" data-lshare="tier" checked> Curated, dormant, fork</label>
+      <label><input type="checkbox" data-lshare="dates"> Dates</label>
+      <label><input type="checkbox" data-lshare="cats"> Categories</label>
+      <label><input type="checkbox" data-lshare="link" checked> A link back to this search</label>
+    </div>
+
+    <textarea id="listShareText" rows="14" readonly aria-label="Text to copy"></textarea>
+    <div class="modal-actions">
+      <button class="btn" id="listShareCopy">Copy text</button>
+      <span class="kbd-hint" id="listShareSize"></span>
+    </div>
+
+    <p class="sheet-foot">The link at the end reopens this same search here, with
+      whatever the index says on the day it is clicked. The list above is a
+      snapshot of today's, which is why it carries the index date.</p>
   </div>
 </div>
 
@@ -912,7 +970,10 @@ function explain(entry, tokens) {
 // megabyte, and most searches are answered without it.
 const state = { index: null, tab: "plugins", query: "", category: null, showC: false,
                 readmes: null, aiUseFilter: true, sort: "match",
-                answer: null, sharedHash: null, fromLink: false };
+                answer: null, sharedHash: null, fromLink: false,
+                // The last list render() put on screen, and how many matched
+                // before it was cut to the thirty that fit.
+                shown: [], shownTotal: 0 };
 
 // A repository date, not a plugin one: a plugin that moved out of a monorepo
 // dates from the move, and one whose author renamed the repo keeps the old
@@ -1876,6 +1937,26 @@ function revealAnswer() {
   window.scrollTo({ top: top + window.scrollY - 90, behavior: still ? "auto" : "smooth" });
 }
 
+const flashLabel = (button, label) => {
+  const was = button.textContent;
+  button.textContent = label;
+  setTimeout(() => { button.textContent = was; }, 1200);
+};
+
+async function copyText(value) {
+  try { await navigator.clipboard.writeText(value); }
+  catch {
+    // Clipboard access is refused outside a secure context, and this page is
+    // opened from a file:// path often enough to matter.
+    const scratch = document.createElement("textarea");
+    scratch.value = value;
+    document.body.appendChild(scratch);
+    scratch.select();
+    document.execCommand("copy");
+    scratch.remove();
+  }
+}
+
 function bindShare() {
   const button = $("shareOpen");
   if (button) button.addEventListener("click", openShare);
@@ -1917,31 +1998,173 @@ function setupShareModal() {
       paintShare();
     });
   });
-  const flash = (button, label) => {
-    const was = button.textContent;
-    button.textContent = label;
-    setTimeout(() => { button.textContent = was; }, 1200);
-  };
-  const copy = async value => {
-    try { await navigator.clipboard.writeText(value); }
-    catch {
-      // Clipboard access is refused outside a secure context, and this page is
-      // opened from a file:// path often enough to matter.
-      const scratch = document.createElement("textarea");
-      scratch.value = value;
-      document.body.appendChild(scratch);
-      scratch.select();
-      document.execCommand("copy");
-      scratch.remove();
-    }
-  };
   $("shareCopy").addEventListener("click", async () => {
-    await copy($("shareText").value);
-    flash($("shareCopy"), "Copied");
+    await copyText($("shareText").value);
+    flashLabel($("shareCopy"), "Copied");
   });
   $("shareUrlCopy").addEventListener("click", async () => {
-    await copy($("shareUrl").value);
-    flash($("shareUrlCopy"), "✓");
+    await copyText($("shareUrl").value);
+    flashLabel($("shareUrlCopy"), "✓");
+  });
+}
+
+/* -------------------------------------------------------- sharing a result list
+
+   Someone answering "which plugin syncs my highlights?" in a forum thread has
+   this page open and a reply box next to it. What they need out of here is not
+   a screenshot and not thirty links: it is the top few, in the order this page
+   ranked them, with enough about each one to be worth reading.
+
+   Two rules follow from that. Only what is on screen can be shared -- the cut
+   runs from the top of the list the reader is looking at, so nothing they
+   could not have read goes out under their name. And the text has to say how
+   the list was narrowed, or it is a pile of names with no argument behind it.
+*/
+
+const LIST_SHARE_DEFAULTS = { purpose: true, url: true, stars: true, tier: true,
+                              dates: false, cats: false, link: true };
+
+// Its own key. The two dialogs share a look and nothing else: unticking "fit
+// scores" on an answer says nothing about whether a list should carry stars.
+function listShareOpts() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem("kpi.share.list") || "{}"); } catch {}
+  const out = {};
+  for (const key of Object.keys(LIST_SHARE_DEFAULTS)) {
+    out[key] = typeof saved[key] === "boolean" ? saved[key] : LIST_SHARE_DEFAULTS[key];
+  }
+  return out;
+}
+
+// Plain text, for the same reason the answer dialog uses it: this is going
+// into a forum post, a chat message or an email, and a numbered list is the
+// one format all three render the way it was written.
+//
+// Everything it needs is passed in. Nothing here reads `state`, which is what
+// makes the format checkable without a browser -- see tests/share_list.mjs.
+function listShareTextFor(entries, opts, view) {
+  // Both halves of the narrowing, when both are on: a category chosen beside a
+  // query changes the list as much as the query does, and a heading naming
+  // only one of them describes a search nobody ran.
+  const head = [view.tab === "patches" ? "patches" : "plugins"];
+  if (view.query) head[0] = `${head[0]} matching "${view.query}"`;
+  if (view.category) head.push(view.category);
+
+  // The narrowing, stated. A reader of the post has to be able to tell a
+  // top-five off a full list, and an ordering by date off one by relevance.
+  const scope = [entries.length < view.total
+    ? `First ${entries.length} of ${view.total}`
+    : `${view.total} ${view.total === 1 ? "result" : "results"}`];
+  if (view.sort === "updated") scope.push("most recently updated first");
+  if (view.sort === "new") scope.push("newest first");
+  if (view.showC) scope.push("dormant, forks and stubs included");
+  // Dated, because a list pasted into a thread outlives the day it was made
+  // and this catalogue is rebuilt every night.
+  if (view.generated) scope.push(`index ${view.generated}`);
+
+  const lines = [`KOReader Plugin Finder — ${head.join(" · ")}`, scope.join(" · "), ""];
+
+  entries.forEach((entry, i) => {
+    const n = `${i + 1}.`;
+    // Indented to clear the number, not by a fixed three spaces: at the tenth
+    // entry a fixed indent steps back under the digits and the block stops
+    // reading as one item.
+    const pad = " ".repeat(n.length + 1);
+    lines.push(`${n} ${entry.id}`);
+    const says = entry.purpose || entry.description || "";
+    if (opts.purpose && says) lines.push(`${pad}${says}`);
+    const facts = [];
+    if (opts.stars) facts.push(`★ ${(isPatch(entry) ? entry.repo_stars : entry.stars) || 0}`);
+    if (opts.tier) facts.push(tierLabel(entry));
+    if (opts.dates && updatedOf(entry)) facts.push(`updated ${whenLabel(updatedOf(entry))}`);
+    if (opts.dates && createdOf(entry)) facts.push(`added ${whenLabel(createdOf(entry))}`);
+    if (opts.cats && (entry.categories || []).length) facts.push(entry.categories.join(", "));
+    if (facts.length) lines.push(`${pad}${facts.join(" · ")}`);
+    if (opts.url) lines.push(`${pad}${entry.url}`);
+    lines.push("");
+  });
+
+  if (opts.link) lines.push(view.url);
+  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n";
+}
+
+// The category is carried as a label rather than as its id: `cat=ui` is what
+// the address bar wants and "Interface" is what a sentence wants.
+function listShareView() {
+  const source = state.tab === "patches"
+    ? (state.patchCategories || [])
+    : (state.index.categories || []);
+  const cat = source.find(c => c.id === state.category);
+  const generated = state.index.generated_at
+    ? state.index.generated_at.slice(0, 10) : "";
+  return {
+    tab: state.tab, query: state.query.trim(), category: cat ? cat.label : "",
+    sort: state.sort, showC: state.showC, total: state.shownTotal,
+    generated, url: viewUrl()
+  };
+}
+
+function openListShare() {
+  if (!state.shown.length) return;
+  const opts = listShareOpts();
+  $("listShareOpts").querySelectorAll("[data-lshare]").forEach(box => {
+    box.checked = opts[box.dataset.lshare];
+  });
+  // Ten, or fewer if that is all there is. Not remembered between openings:
+  // the right number is a property of the list being shared, not of the
+  // person sharing it, and reopening on a list of three with 10 in the box
+  // reads as a promise the page cannot keep.
+  $("listShareCount").value = String(Math.min(10, state.shown.length));
+  paintListShare();
+  $("listShareModal").hidden = false;
+}
+
+// Everything but the number is derived on every paint, because the list can
+// move while the dialog is open: the overlay covers the page but does not take
+// focus off the search box behind it, so a keystroke there re-renders the
+// results under a preview that would otherwise go on describing them.
+function paintListShare() {
+  const box = $("listShareCount");
+  box.max = String(state.shown.length);
+  // The page itself stops at thirty cards. Sharing further down would mean
+  // vouching for entries nobody scrolled past, so the ceiling is said plainly
+  // rather than enforced silently.
+  $("listShareScope").textContent = state.shownTotal > state.shown.length
+    ? `${state.shownTotal} matched; the page shows the first ${state.shown.length}, and this shares from those.`
+    : "";
+  const asked = parseInt(box.value, 10);
+  const count = Math.max(1, Math.min(state.shown.length, isNaN(asked) ? 10 : asked));
+  const text = listShareTextFor(state.shown.slice(0, count), listShareOpts(), listShareView());
+  $("listShareText").value = text;
+  $("listShareSize").textContent =
+    `${count} of ${state.shown.length} · ${text.length} characters`;
+}
+
+function setupListShareModal() {
+  const close = () => { $("listShareModal").hidden = true; };
+  $("listShareOpen").addEventListener("click", openListShare);
+  $("listShareClose").addEventListener("click", close);
+  $("listShareModal").addEventListener("click", e => {
+    if (e.target === $("listShareModal")) close();
+  });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && !$("listShareModal").hidden) close();
+  });
+  // Repainted as it is typed rather than behind a "generate" button: the whole
+  // point of the preview is to answer "is this too long to paste?", and an
+  // answer that is one click stale does not.
+  $("listShareCount").addEventListener("input", paintListShare);
+  $("listShareOpts").querySelectorAll("[data-lshare]").forEach(box => {
+    box.addEventListener("change", () => {
+      const next = listShareOpts();
+      next[box.dataset.lshare] = box.checked;
+      localStorage.setItem("kpi.share.list", JSON.stringify(next));
+      paintListShare();
+    });
+  });
+  $("listShareCopy").addEventListener("click", async () => {
+    await copyText($("listShareText").value);
+    flashLabel($("listShareCopy"), "Copied");
   });
 }
 
@@ -2073,7 +2296,20 @@ function render() {
       heading = state.sort === "new" ? "Newest first" : "Recently updated";
     }
   }
+  const total = list.length;
   list = list.slice(0, 30);
+
+  // What the share dialog cuts from, and the size of the list it was cut out
+  // of. Set here rather than read back off the page, so the text it produces
+  // is built from the entries themselves and not from rendered cards.
+  state.shown = list;
+  state.shownTotal = total;
+  $("listShareOpen").hidden = !list.length;
+  if (!$("listShareModal").hidden) {
+    // Nothing left to cut from is not a dialog, it is a dead end.
+    if (list.length) paintListShare();
+    else $("listShareModal").hidden = true;
+  }
 
   $("count").textContent = tokens.length ? heading : "";
 
@@ -2410,10 +2646,31 @@ function welcomeFor(tags) {
   el.hidden = false;
 })();
 
+// The view as a query string: tab, query, category and order. Written once
+// and used twice -- for the address bar, and for the link the share dialog
+// puts at the end of a shared list -- so the two can never describe different
+// searches. The mode is the address bar's business alone: a list is shared
+// from browsing, and ?ai=1 on it would open the reader into a dialog they did
+// not ask for.
+function viewParams() {
+  const params = new URLSearchParams();
+  if (state.sort !== "match") params.set("sort", state.sort);
+  if (state.tab === "patches") params.set("tab", "patches");
+  if (state.query.trim()) params.set("q", state.query.trim());
+  if (state.category) params.set("cat", state.category);
+  return params;
+}
+
+function viewUrl() {
+  const query = viewParams().toString();
+  return location.origin + location.pathname + (query ? `?${query}` : "");
+}
+
 // Keeps the address bar honest about the whole view -- mode, tab, query and
 // category -- so the page can be reloaded, bookmarked or sent to someone and
-// come back the same. This is why there is no share button: the browser
-// already has one, and it only works if the URL is telling the truth.
+// come back the same. The share button beside the results does not replace
+// this and could not: what it produces is a readable list, and what this
+// produces is the search that made it. Both have to be true at once.
 // replaceState rather than pushState: switching modes is not a navigation and
 // should not put a stop on the back button between here and the page before.
 //
@@ -2421,12 +2678,8 @@ function welcomeFor(tags) {
 // the mode switch could not see it there and threw on every click -- the mode
 // opened, the URL never changed, and nothing said why.
 function syncUrl() {
-  const params = new URLSearchParams();
-  if (state.sort !== "match") params.set("sort", state.sort);
+  const params = viewParams();
   if (!$("aiView").hidden) params.set("ai", "1");
-  if (state.tab === "patches") params.set("tab", "patches");
-  if (state.query.trim()) params.set("q", state.query.trim());
-  if (state.category) params.set("cat", state.category);
   const query = params.toString();
   // A shared link stays in the address bar while its answer is on screen:
   // rewriting the URL from under a reader would make refreshing lose the thing
@@ -2563,6 +2816,7 @@ async function boot() {
   setupAI();
   setupInstallModal();
   setupShareModal();
+  setupListShareModal();
 
   // After setupAI, not before it. ?ai=1 works by clicking the pill, and the
   // pill's listener is registered in setupAI -- run earlier, the click landed

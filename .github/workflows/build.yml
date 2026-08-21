@@ -75,6 +75,11 @@ jobs:
       - name: AI Mode flow
         run: node tests/ai_flow.mjs
 
+      # A list copied out of the results is read somewhere nobody here can
+      # see, so what it carries has to be pinned down where it is built.
+      - name: Shared list
+        run: node tests/share_list.mjs
+
       # 46 lines nobody here can proofread by reading the page, shown on the
       # strength of a header. Coverage and direction are checkable; the prose
       # is not, so at least these are.
