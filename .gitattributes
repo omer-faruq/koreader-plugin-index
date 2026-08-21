@@ -1,0 +1,6 @@
+# Everything in here is already stored with LF, and the workflow's shell steps
+# are the reason to keep it that way: a `run: |` block checked out with CRLF
+# fails on the runner in ways that read as a logic error. Pinning the checkout
+# too, not just the commit, means a contributor on Windows cannot reintroduce
+# CRLF by editing and committing back. Binary files are detected and left alone.
+* text=auto eol=lf
