@@ -241,17 +241,31 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
 .modal-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; font-size: .82rem; color: var(--muted); }
 #aiOut:not(:empty) { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 14px; }
 
+/* A centred flex item that outgrows its container spills past both edges, and
+   the top edge of a scroll container cannot be scrolled back to: on a narrow
+   screen that put the title and its close button out of reach, with no visible
+   way left to dismiss the dialog. So the sheet does its own scrolling, never
+   grows past the viewport, and centres by auto margins instead, which keep the
+   top reachable even if it does overflow. */
 .overlay {
   position: fixed; inset: 0; z-index: 60; display: flex;
-  align-items: center; justify-content: center;
-  padding: 5vh 16px; background: rgba(0,0,0,.45); overflow-y: auto;
+  align-items: flex-start; justify-content: center;
+  padding: max(16px, 5vh) 16px; background: rgba(0,0,0,.45); overflow-y: auto;
 }
 .sheet {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 14px; box-shadow: 0 12px 40px rgba(0,0,0,.25);
-  width: 100%; max-width: 460px; padding: 20px;
+  width: 100%; max-width: 460px; margin: auto; padding: 0 20px 20px;
+  max-height: calc(100vh - max(32px, 10vh));
+  max-height: calc(100dvh - max(32px, 10vh));
+  overflow-y: auto; overscroll-behavior: contain;
 }
-.sheet .modal-head { margin-top: 0; }
+/* The title rides along with the content, so the way out is on screen at every
+   scroll position. Full bleed, to cover the text passing underneath it. */
+.sheet .modal-head {
+  position: sticky; top: 0; z-index: 1; background: var(--surface);
+  margin: 0 -20px 12px; padding: 18px 20px 10px;
+}
 .steps { margin: 0 0 14px; padding-left: 20px; font-size: .88rem; line-height: 1.6; }
 .steps b { color: var(--text); }
 .pair { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
@@ -405,6 +419,11 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
   width: 100%; padding: 12px 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: .8rem; line-height: 1.5; color: var(--text); background: var(--bg);
   border: 1px solid var(--border); border-radius: 10px; resize: vertical;
+}
+/* On a short screen twelve rows of text fill it on their own, pushing the copy
+   button and the link below what the sheet can show at once. */
+@media (max-height: 720px) {
+  #shareText, #listShareText { max-height: 38vh; }
 }
 .share-link { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
 .share-link .pair-row { border: 1px solid var(--border); border-radius: 8px; }
