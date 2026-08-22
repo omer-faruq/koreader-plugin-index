@@ -375,6 +375,13 @@ def render_catalogue(index, patches, base, source, appstore):
 </footer>
 
 </div>
+
+<!-- Cloudflare Web Analytics, the same beacon and token as the search page, so
+     the two pages are counted together rather than one of them silently going
+     missing. It loads as a module and blocks nothing: this page is the one that
+     has to stay readable without JavaScript, and it still is when the beacon
+     never arrives. Caveats live with the copy in index.html. -->
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{{"token": "6efd8a24464042b5a0a81dfe296b7b8d"}}'></script>
 </body>
 </html>
 """

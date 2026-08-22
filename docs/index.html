@@ -830,6 +830,23 @@ footer a { color: var(--accent); }
 
 </div>
 
+<!-- Cloudflare Web Analytics. A Pages site has no server log, so this beacon is
+     the only way to know whether anyone reaches the page at all. It is
+     cookieless and stores nothing per visitor, which is why there is no consent
+     banner beside it and why it can stay.
+     Read the numbers as a trend, never as a headcount: the readers this page is
+     for run content blockers at well above the usual rate, and this host sits on
+     the common privacy lists, so a real share of visits is never counted.
+     The view lives in the query string and is written with replaceState rather
+     than pushState, so changing a filter is not counted as another page view.
+     Keep it that way, or the totals start inflating themselves.
+     It sits above the page script rather than below it because the tests read
+     the page script as the last script block on the page and run it: anything
+     added after it is swallowed into what they try to execute, and the tests
+     die on a syntax error. For the same reason this comment spells no tag out
+     in full, since the extraction looks for the opening one by name. -->
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "6efd8a24464042b5a0a81dfe296b7b8d"}'></script>
+
 <script>
 "use strict";
 
