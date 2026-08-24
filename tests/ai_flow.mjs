@@ -382,6 +382,28 @@ check("and is named as credit, not as speed", /out of credit/i.test(out()), out(
 check("the provider's own words survive",
   /check your plan and billing/i.test(out()), out().slice(0, 240));
 
+// === 13. the page says it is working while it waits =======================
+// The only check here that looks at the screen mid-flight rather than after:
+// the scripted model reads aiOut at the moment it is called, which is exactly
+// when a reader on a slow free tier is looking at it and wondering whether
+// anything is happening.
+const midFlight = [];
+script = [
+  { kind: "expand", reply: user => { midFlight.push(out()); return { terms: ["opds"], language: "English" }; } },
+  { kind: "weigh", reply: user => { midFlight.push(out()); return takeFirst(80)(user); } }
+];
+document.getElementById("aiQuestion").value = "browse an opds catalog";
+await api.runAI();
+check("waiting while the question is read", /class="state working"/.test(midFlight[0] || ""),
+  (midFlight[0] || "").slice(0, 120));
+check("waiting while the candidates are weighed", /class="state working"/.test(midFlight[1] || ""),
+  (midFlight[1] || "").slice(0, 120));
+check("the moving part is there to be seen", /<span class="dots"[^>]*>(<i><\/i>){3}<\/span>/.test(midFlight[1] || ""),
+  (midFlight[1] || "").slice(0, 160));
+check("it says what it is waiting for", /Weighing \d+ candidates/.test(midFlight[1] || ""),
+  (midFlight[1] || "").slice(0, 160));
+check("and it is gone once there is an answer", !/state working/.test(out()), out().slice(0, 120));
+
 // Quiet when it passes, for the same reason parity_check.py is: a nightly log
 // nobody reads is a log that hides the one line that mattered.
 const failures = t.filter(line => line.startsWith("FAIL"));

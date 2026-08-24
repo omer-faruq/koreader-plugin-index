@@ -513,6 +513,25 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
 
 .state { text-align: center; padding: 44px 20px; color: var(--muted); }
 .state a { color: var(--accent); }
+/* Only on the states that are waiting for something, never on the ones that
+   are the final word. A question put to a free tier can sit for ten seconds
+   with nothing moving, and a page that looks stopped gets Ask pressed again --
+   which spends a second request against the same key to ask the same thing. */
+.dots { display: inline-block; margin-left: 2px; white-space: nowrap; }
+.dots i {
+  display: inline-block; width: 4px; height: 4px; margin-left: 3px;
+  border-radius: 50%; background: currentColor; opacity: .2;
+  animation: dot 1.1s ease-in-out infinite;
+}
+.dots i:nth-child(2) { animation-delay: .18s; }
+.dots i:nth-child(3) { animation-delay: .36s; }
+@keyframes dot { 0%, 60%, 100% { opacity: .2; } 30% { opacity: 1; } }
+/* Asked for by readers who get motion sick, and by e-ink browsers where an
+   animation is a full refresh three times a second. The dots stay, because
+   they are also the punctuation the sentence would have ended with. */
+@media (prefers-reduced-motion: reduce) {
+  .dots i { animation: none; opacity: .5; }
+}
 .section-title { font-size: .82rem; text-transform: uppercase; letter-spacing: .06em;
   color: var(--muted); margin: 26px 0 10px; font-weight: 600; }
 footer { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--border);
@@ -751,6 +770,7 @@ footer a { color: var(--accent); }
           <select id="aiProvider">
             <option value="deepseek">DeepSeek</option>
             <option value="zai">Z.AI</option>
+            <option value="groq">Groq</option>
             <option value="openai">OpenAI</option>
             <option value="openrouter">OpenRouter</option>
             <option value="anthropic">Anthropic</option>
@@ -1124,6 +1144,28 @@ const PROVIDERS = {
                 note: "glm-4.7-flash costs nothing. Thinking is turned off here — it is on by default, and it is most of the wait.",
                 extra: { thinking: { type: "disabled" },
                          response_format: { type: "json_object" },
+                         max_tokens: 1200 } },
+  // The other one that charges nothing, and the reason it is here at all is
+  // the shortlist trim below: its free tier allows fewer tokens a minute than
+  // a full shortlist costs, so until a request could be made smaller this
+  // provider could not answer a single question. It says so precisely enough
+  // to act on -- "Limit 8000, Requested 9421" -- which is what the trim reads.
+  //
+  // The cost of that is a rejected request before each accepted one. Worth it
+  // for a free tier this fast, and visible in the answer, which says when it
+  // was asked with fewer candidates.
+  //
+  // 120b rather than 20b because both sit under the same ceiling and the same
+  // daily allowance: the smaller model buys speed from a provider that is
+  // already the fastest here, and pays for it in judgement. No reasoning_effort
+  // -- Groq documents its reasoning parameters as mutually exclusive with JSON
+  // mode, and an untested combination does not belong in a shipped preset. The
+  // Extra request fields box is where to try it.
+  groq:       { url: "https://api.groq.com/openai/v1/chat/completions",
+                model: "openai/gpt-oss-120b", shape: "openai",
+                keys: "https://console.groq.com/keys",
+                note: "gpt-oss-120b costs nothing. The free tier caps tokens a minute, so a question may go out with a shorter shortlist — the answer says when it does.",
+                extra: { response_format: { type: "json_object" },
                          max_tokens: 1200 } },
   custom:     { url: "", model: "", shape: "openai" }
 };
@@ -1579,6 +1621,12 @@ async function expandQuery(cfg, question) {
   }
 }
 
+// Every message the page writes while it is waiting on the model, so the
+// moving part is not something four call sites have to remember. The text
+// carries no ellipsis of its own: the dots are the ellipsis, and they move.
+const working = text =>
+  `<div class="state working">${text}<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></div>`;
+
 // What the current question has cost so far: the candidates weighed, the picks
 // made and the words spent getting them. Held between calls so a round the
 // reader asks for adds to the answer instead of replacing it. A new question
@@ -1669,7 +1717,7 @@ async function runAI() {
   // that carried it stops describing what is on screen.
   state.sharedHash = null;
   $("aiEscape").hidden = true;
-  $("aiOut").innerHTML = `<div class="state">Reading the question…</div>`;
+  $("aiOut").innerHTML = working("Reading the question");
   const expanded = await expandQuery(cfg, question);
   const terms = expanded && expanded.terms.length ? expanded.terms : null;
   const language = (expanded && expanded.language) || "the language of the question";
@@ -1727,9 +1775,9 @@ async function aiRounds(cfg, session, candidates, budget) {
     // reader asked for is the first of its call and still the second thing
     // the model has been shown.
     const later = round > 0 || session.weighed > 0;
-    $("aiOut").innerHTML = `<div class="state">${later
-      ? `Looking again — weighing ${candidates.length} more candidates…`
-      : `Weighing ${candidates.length} candidates…`}</div>`;
+    $("aiOut").innerHTML = working(later
+      ? `Looking again — weighing ${candidates.length} more candidates`
+      : `Weighing ${candidates.length} candidates`);
 
     // Confusions are named between entries on screen together, so this round's
     // shortlist counts -- but it does not join `byId` until the model has
@@ -1782,8 +1830,8 @@ async function aiRounds(cfg, session, candidates, budget) {
         // -- has to describe the list the model was actually shown.
         session.trimmed = { from: candidates.length, to: fits };
         candidates = candidates.slice(0, fits);
-        $("aiOut").innerHTML = `<div class="state">Too many tokens a minute for this
-          key — weighing ${fits} candidates instead…</div>`;
+        $("aiOut").innerHTML =
+          working(`Too many tokens a minute for this key — weighing ${fits} instead`);
         // Not caught again. A second ceiling on a list this size is no longer a
         // size problem, and the outer handler reports it as what it is.
         result = await ask(candidates);
@@ -1917,8 +1965,8 @@ async function lookAgain(session, narrowing) {
   if (missing) session.refinements.push(missing);
   // The answer is about to stop being the one the shared link described.
   state.sharedHash = null;
-  $("aiOut").innerHTML = `<div class="state">${missing
-    ? "Looking again, narrowed…" : "Looking for another angle…"}</div>`;
+  $("aiOut").innerHTML = working(missing
+    ? "Looking again, narrowed" : "Looking for another angle");
 
   let fresh = [];
   try {
