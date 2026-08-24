@@ -5,8 +5,8 @@
 <!-- index-status:start -->
 > [!TIP]
 > ### [Search the index &nbsp;&rarr;](https://omer-faruq.github.io/koreader-plugin-index/)
-> **781 plugins &middot; 457 patches** across 108 repositories.
-> Last full rebuild **2026-08-22**, diffed nightly.
+> **788 plugins &middot; 457 patches** across 109 repositories.
+> Last full rebuild **2026-08-24**, diffed nightly.
 <!-- index-status:end -->
 
 A self-maintaining index of community KOReader plugins and user patches, and a
