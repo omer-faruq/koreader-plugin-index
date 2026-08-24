@@ -366,8 +366,8 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
 .keysafe em { font-style: normal; font-weight: 600; }
 .panel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
 .panel-grid label { display: flex; flex-direction: column; gap: 4px; font-size: .8rem; color: var(--muted); }
-.panel-grid label.wide { grid-column: 1 / -1; }
-.panel-grid input, .panel-grid select {
+.panel-grid .wide { grid-column: 1 / -1; }
+.panel-grid input, .panel-grid select, .panel-grid textarea {
   padding: 8px 10px; font-size: .9rem; color: var(--text);
   background: var(--bg); border: 1px solid var(--border); border-radius: 7px;
 }
@@ -738,10 +738,19 @@ footer a { color: var(--accent); }
           Anyone using this computer could recover it. Use a key with a spend limit,
           and press <em>Forget key</em> when you are done on a shared machine.</p>
       </div>
+      <!-- Named nobody and quoted no number on purpose. Which providers are
+           free, and how much they allow, changed twice while this was being
+           written; a list here would be wrong within the month, and the button
+           below answers the question for today. -->
+      <p class="field-hint keycost">A key need not cost anything — several providers
+        issue one free and without a card. What each of them allows changes often
+        enough that <em>Test connection</em> answers it better than any list here
+        could.</p>
       <div class="panel-grid">
         <label>Provider
           <select id="aiProvider">
             <option value="deepseek">DeepSeek</option>
+            <option value="zai">Z.AI</option>
             <option value="openai">OpenAI</option>
             <option value="openrouter">OpenRouter</option>
             <option value="anthropic">Anthropic</option>
@@ -757,6 +766,18 @@ footer a { color: var(--accent); }
             usually your base URL plus <code>/v1/chat/completions</code>. Anything
             speaking the OpenAI format works, including a local server.</span>
         </label>
+        <!-- What a preset carries as `extra`, typed by hand for a server that
+             has no preset. The named providers do not get this field: their
+             corrections are shipped, and inviting edits to them would only
+             break requests that already work. -->
+        <label class="wide" id="aiExtraWrap" hidden>
+          Extra request fields
+          <textarea id="aiExtra" rows="3" autocomplete="off" spellcheck="false"
+            placeholder='{"reasoning_effort": "low"}'></textarea>
+          <span class="field-hint">JSON, merged into the request body — for turning
+            a model's thinking off, capping its output, anything this page has no
+            box for. Leave it empty if the server needs nothing.</span>
+        </label>
         <!-- Not type="password", and not autocomplete="new-password" either:
              that is the sign-up signal, so it asks Chrome to save a new
              password rather than to leave this one alone. Masking is done in
@@ -765,6 +786,7 @@ footer a { color: var(--accent); }
                  autocomplete="off" autocapitalize="off" autocorrect="off"
                  data-1p-ignore data-lpignore="true"
                  spellcheck="false" placeholder="stored in this browser"></label>
+        <p class="field-hint wide" id="aiKeyHelp"></p>
       </div>
       <div class="panel-actions">
         <button class="btn" id="aiSave">Save</button>
@@ -1067,13 +1089,42 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
    purpose mentions highlighted text. Give the model the purpose and it sees the
    difference; give it the keywords too and it inherits the same false signal. */
 
+// `shape` is the request format; `extra` is what one provider wants that the
+// others do not understand. It is per-preset rather than sent to everyone,
+// because these are vendor extensions with a different name at each company --
+// reasoning is `thinking` here, `reasoning_effort` at OpenAI, `reasoning` at
+// OpenRouter -- and a strict OpenAI-compatible server, which `custom` exists
+// to support, answers an unknown field with a 400 rather than ignoring it.
+//
+// `keys` is where that provider issues one. Worth carrying because the page is
+// unusable without a key and the link is not always findable: Z.AI keeps it
+// several levels inside an account area.
 const PROVIDERS = {
-  deepseek:   { url: "https://api.deepseek.com/chat/completions",       model: "deepseek-chat",     shape: "openai" },
-  openai:     { url: "https://api.openai.com/v1/chat/completions",      model: "gpt-4o-mini",       shape: "openai" },
-  openrouter: { url: "https://openrouter.ai/api/v1/chat/completions",   model: "openai/gpt-4o-mini", shape: "openai" },
-  anthropic:  { url: "https://api.anthropic.com/v1/messages",           model: "claude-sonnet-4-5", shape: "anthropic" },
+  deepseek:   { url: "https://api.deepseek.com/chat/completions",       model: "deepseek-chat",     shape: "openai",
+                keys: "https://platform.deepseek.com/api_keys" },
+  openai:     { url: "https://api.openai.com/v1/chat/completions",      model: "gpt-4o-mini",       shape: "openai",
+                keys: "https://platform.openai.com/api-keys" },
+  openrouter: { url: "https://openrouter.ai/api/v1/chat/completions",   model: "openai/gpt-4o-mini", shape: "openai",
+                keys: "https://openrouter.ai/keys" },
+  anthropic:  { url: "https://api.anthropic.com/v1/messages",           model: "claude-sonnet-4-5", shape: "anthropic",
+                keys: "https://console.anthropic.com/settings/keys" },
   gemini:     { url: "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                model: "gemini-2.0-flash", shape: "gemini" },
+                model: "gemini-2.0-flash", shape: "gemini",
+                keys: "https://aistudio.google.com/apikey" },
+  // The only preset here whose default model charges nothing, and the reason is
+  // structural rather than promotional: the flash weights are open, so there is
+  // little for Z.AI to recover. The three extras are corrections. Thinking is on
+  // by default and the documentation says these models "think compulsorily" when
+  // it is -- on a free tier limited to one request at a time, that is most of
+  // the wait. `json_object` stops the answer arriving inside a code fence. 1200
+  // tokens is about three times the longest answer asked for here, against a
+  // default that is the model's whole 128k output window.
+  zai:        { url: "https://api.z.ai/api/paas/v4/chat/completions",   model: "glm-4.7-flash",     shape: "openai",
+                keys: "https://z.ai/manage-apikey/apikey-list",
+                note: "glm-4.7-flash costs nothing. Thinking is turned off here — it is on by default, and it is most of the wait.",
+                extra: { thinking: { type: "disabled" },
+                         response_format: { type: "json_object" },
+                         max_tokens: 1200 } },
   custom:     { url: "", model: "", shape: "openai" }
 };
 
@@ -1338,7 +1389,12 @@ async function callModel(cfg, system, user) {
   const model = cfg.model || preset.model;
   const SYSTEM_PROMPT = system;
 
-  let url = cfg.url || preset.url;
+  // A saved URL belongs to `custom` and to nothing else. It used to be honoured
+  // for every provider, so a reader who had set up a custom endpoint and then
+  // switched to a named one kept sending that first host the new provider's
+  // key. The 401 that came back read as a bad key, when the request was simply
+  // arriving at the wrong company.
+  let url = (cfg.provider === "custom" ? cfg.url : "") || preset.url;
   let headers = { "Content-Type": "application/json" };
   let body;
 
@@ -1361,6 +1417,15 @@ async function callModel(cfg, system, user) {
       model, temperature: 0,
       messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: user }]
     };
+  }
+  // Applied after the shape, so a preset can correct its own provider without
+  // any other one hearing about it.
+  Object.assign(body, preset.extra || {});
+  // The same lever, typed by hand, for a server with no preset. Checked when it
+  // is saved; parsed defensively again here, because what is in storage can be
+  // edited by hand and a bad character there must not cost anyone an answer.
+  if (cfg.provider === "custom" && cfg.extra) {
+    try { Object.assign(body, JSON.parse(cfg.extra)); } catch {}
   }
 
   let resp;
@@ -1391,27 +1456,100 @@ async function callModel(cfg, system, user) {
   catch { throw new Error("the model did not return usable JSON"); }
 }
 
-// Names which of the three things went wrong, because they are indistinguishable
-// from the outside and lead to opposite fixes: regenerating a key that was fine,
-// or hunting a model name when the provider simply will not answer a browser.
+// The provider's own words. `callModel` has always put the first 200 characters
+// of the failed response on the error and this function has always thrown them
+// away, which is how three unrelated failures -- a per-minute token ceiling, a
+// key sent to the wrong host, a model that is not on the account -- all arrived
+// reading the same sentence. The status says which category; only the body says
+// which limit, which host, which field.
+function providerSaid(err) {
+  // The message is always "<status> <first 200 bytes of the body>".
+  const raw = String(err.message || "").replace(/^[0-9]{3} */, "").trim();
+  if (!raw) return "";
+  let said = raw;
+  // Truncation at 200 characters means the JSON often will not parse. That is
+  // fine: the raw fragment is still the most informative thing available.
+  try {
+    const parsed = JSON.parse(raw);
+    said = parsed?.error?.message || parsed?.message || parsed?.error?.code || raw;
+  } catch {}
+  return String(said).slice(0, 160);
+}
+
+// A per-minute token ceiling is the only failure here that asking for less can
+// fix, and the free tiers that have one set it below what a full shortlist
+// costs -- so the choice is a shorter question or no answer, not a shorter
+// question or a better one. Everything else a 429 can mean is untouched by
+// size: a cap on requests rather than tokens, an empty account, a saturated
+// upstream. Retrying those would spend a second request to be told the same
+// thing, which on a fifty-a-day key is a real price.
+//
+// The numbers are the provider's. "Limit 8000 ... Requested 9421" says both
+// what fits and what was asked, and the shortlist scales by the ratio, so a
+// smaller ceiling gets a proportionally shorter list rather than a guess. Nine
+// tenths of the limit, because the reply is spent from the same minute. Where
+// the wording carries no numbers, thirty is the count measured to fit the
+// smallest free ceiling seen here.
+function shortlistUnderCeiling(err, count) {
+  if (err.status !== 429) return 0;
+  const said = providerSaid(err);
+  if (!/token/i.test(said)) return 0;
+  const limit = Number((/\blimit\D{0,3}([0-9]+)/i.exec(said) || [])[1]);
+  const asked = Number((/\brequested\D{0,3}([0-9]+)/i.exec(said) || [])[1]);
+  const fits = limit && asked ? Math.floor(count * limit * 0.9 / asked) : 30;
+  // Under a dozen the shortlist can no longer be trusted to hold the answer,
+  // and saying the ceiling is too low is worth more than four picks drawn from
+  // eleven candidates.
+  return fits >= 12 && fits < count ? fits : 0;
+}
+
+// Names which of the things went wrong, because they are indistinguishable from
+// the outside and lead to opposite fixes: regenerating a key that was fine, or
+// hunting a model name when the provider simply will not answer a browser.
 function describeFailure(err) {
+  const said = providerSaid(err);
+  // Every branch below is this page's guess at the category. The provider's own
+  // sentence is appended rather than replacing it, because the two answer
+  // different questions: what kind of problem this is, and what exactly it was.
+  const and = (what, detail) => [what, said ? detail + " It said: " + said : detail];
+
   if (err.kind === "blocked") {
     return ["This provider refuses requests made straight from a browser.",
             "That is its policy, not a problem with your key — try another provider."];
   }
-  if (err.status === 401 || err.status === 403) {
-    return ["The provider rejected the key.",
-            "Check it was copied whole, and that it is a key for this provider."];
+  if (err.status === 401) {
+    return and("The provider rejected the key.",
+               "Check it was copied whole, and that it is a key for this provider.");
+  }
+  // Split from 401, which it used to share. A 403 usually means the key is
+  // known and this particular request is not allowed -- a region, a data
+  // policy, a model the account cannot reach -- and telling someone to check
+  // they copied the key sends them to re-copy a key that was never the problem.
+  if (err.status === 403) {
+    return and("The provider refused this request.",
+               "The key was recognised; something about the request or the account is not permitted.");
+  }
+  if (err.status === 402) {
+    return and("The account is out of credit.", "The key works; there is nothing left to spend.");
   }
   if (err.status === 404) {
-    return ["The provider has no such model or endpoint.",
-            "Check the model name; for a custom URL, it must be the full chat-completions path."];
+    return and("The provider has no such model or endpoint.",
+               "Check the model name; for a custom URL, it must be the full chat-completions path.");
   }
+  // 429 is the one status these providers disagree about. DeepSeek and Z.AI
+  // keep billing at 402 and leave 429 meaning "too fast"; OpenAI puts both
+  // under 429 and separates them only in the body, as insufficient_quota
+  // against rate_limit_exceeded. Waiting fixes one of them and will never fix
+  // the other, so where the status cannot say which, the body decides.
   if (err.status === 429) {
-    return ["Rate limited or out of credit.", "The key works; the account cannot spend right now."];
+    if (/insufficient_quota|exceeded your current quota|billing|out of credit/i.test(said)) {
+      return and("The account is out of credit.", "The key works; there is nothing left to spend.");
+    }
+    return and("Rate limited.",
+               "Too many requests, or too many tokens in one minute, for what this key is allowed.");
   }
   if (err.status >= 500) {
-    return ["The provider had an error of its own.", "Nothing to fix here — try again shortly."];
+    return and("The provider had an error of its own.", "Nothing to fix here — try again shortly.");
   }
   if (/usable JSON/.test(err.message)) {
     return ["Connected, but the model did not reply in JSON.",
@@ -1567,7 +1705,10 @@ async function runAI() {
     // Counted after a call returns, not before it goes out. A round that
     // failed retrieved candidates the model never saw, and reporting them as
     // weighed would overstate what the answer rests on.
-    weighed: 0, note: "", failed: null
+    weighed: 0, note: "", failed: null,
+    // Set when a round had to ask with fewer candidates than the settings say,
+    // and cleared once the answer has admitted it.
+    trimmed: null
   };
   if (await aiRounds(cfg, aiSession, candidates, tuning().retries)) renderAnswer(aiSession);
 }
@@ -1593,10 +1734,14 @@ async function aiRounds(cfg, session, candidates, budget) {
     // Confusions are named between entries on screen together, so this round's
     // shortlist counts -- but it does not join `byId` until the model has
     // actually been shown it. A call that fails must not quietly retire
-    // candidates nobody weighed.
-    const showing = new Set([...byId.keys(), ...candidates.map(e => e.id)]);
-    const relevant = (state.index.distinctions || []).filter(d =>
-      (d.between || []).filter(x => showing.has(x)).length >= 2);
+    // candidates nobody weighed. Computed per list rather than once, so a
+    // shortlist trimmed to fit a ceiling does not carry a note about an entry
+    // that is no longer in it.
+    const confusionsAmong = list => {
+      const showing = new Set([...byId.keys(), ...list.map(e => e.id)]);
+      return (state.index.distinctions || []).filter(d =>
+        (d.between || []).filter(x => showing.has(x)).length >= 2);
+    };
     const roundsLeft = budget - round;
 
     try {
@@ -1615,18 +1760,34 @@ async function aiRounds(cfg, session, candidates, budget) {
       // picks rather than keeping them -- would be told it is keeping entries
       // that are not there.
       if (merged.size) system += " " + RETRY_FOLLOWUP;
-      result = await callModel(cfg, system, JSON.stringify({
+      const ask = list => callModel(cfg, system, JSON.stringify({
         question: session.question,
         looking_for: state.tab === "patches" ? "user patches" : "plugins",
-        candidates: candidates.map(compact),
+        candidates: list.map(compact),
         // Joined rather than listed, because they are conditions on one
         // question and a model handed an array tends to answer the last item.
         ...(session.refinements.length
           ? { refinement: session.refinements.join("; ") } : {}),
         ...(merged.size ? { already_found: [...merged.values()]
           .map(p => ({ id: p.id, fit: p.score, why: p.why })) } : {}),
-        known_confusions: relevant.map(d => ({ between: d.between, note: d.say }))
+        known_confusions: confusionsAmong(list).map(d => ({ between: d.between, note: d.say }))
       }));
+      try {
+        result = await ask(candidates);
+      } catch (err) {
+        const fits = shortlistUnderCeiling(err, candidates.length);
+        if (!fits) throw err;
+        // Reassigned rather than kept beside the full list, because everything
+        // after this -- what was weighed, which ids a pick is checked against
+        // -- has to describe the list the model was actually shown.
+        session.trimmed = { from: candidates.length, to: fits };
+        candidates = candidates.slice(0, fits);
+        $("aiOut").innerHTML = `<div class="state">Too many tokens a minute for this
+          key — weighing ${fits} candidates instead…</div>`;
+        // Not caught again. A second ceiling on a list this size is no longer a
+        // size problem, and the outer handler reports it as what it is.
+        result = await ask(candidates);
+      }
     } catch (err) {
       // Always recorded, never swallowed: the request was paid for with the
       // reader's key, and one they asked for by name cannot fail in silence.
@@ -1839,9 +2000,20 @@ function renderAnswer(session) {
     ? `<div class="note"><b>${esc(failed[0])}</b>${esc(failed[1])} Below is what
         the earlier rounds found.</div>`
     : "";
+  // Shown for the same reason as the fail note, and cleared the same way: the
+  // answer rests on a shorter shortlist than the settings ask for, which is
+  // the reader's to know rather than ours to quietly absorb.
+  const trimmed = session.trimmed;
+  session.trimmed = null;
+  const trimNote = trimmed
+    ? `<div class="note info"><b>Asked with a shorter shortlist</b>This key allows
+        fewer tokens a minute than ${trimmed.from} candidates cost, so the question
+        went out with ${trimmed.to}. A provider with more room weighs the full
+        list.</div>`
+    : "";
 
   if (!picks.length) {
-    $("aiOut").innerHTML = failNote +
+    $("aiOut").innerHTML = failNote + trimNote +
       `<div class="note info"><b>Nothing in the shortlist fits</b>${
         esc(session.note || "The model found no candidate that actually does this.")}${
         searchedAgainFor.length
@@ -1869,7 +2041,7 @@ function renderAnswer(session) {
   // adjacent answers leave a reader roughly where no answer would, so the
   // offer an empty result makes is worth making here too.
   const weak = picks[0].score != null && picks[0].score < 60;
-  $("aiOut").innerHTML = failNote +
+  $("aiOut").innerHTML = failNote + trimNote +
     `<div class="ai-head"><span class="section-title">${picks.length} of ${session.weighed} candidates fit${
       searchLine ? ` · ${esc(searchLine)}` : ""}</span>` +
     `<button class="btn ghost" id="shareOpen">Share</button></div>` +
@@ -2454,8 +2626,8 @@ function render() {
     ? `<div class="note info"><b>That reads like a question</b>
        Keyword search matched ${list.length} entries and cannot tell which of them
        actually do this. A model can, using your own API key —
-       <button class="linkish" id="hintOpen">set one up</button>. Everything else
-       here works without it.</div>`
+       <button class="linkish" id="hintOpen">set one up</button>, free at some
+       providers. Everything else here works without it.</div>`
     : "";
 
   $("notes").innerHTML = warning + hint;
@@ -3045,13 +3217,29 @@ function setupAI() {
     const preset = PROVIDERS[$("aiProvider").value] || PROVIDERS.custom;
     $("aiModel").placeholder = preset.model || "model name";
     $("aiUrlWrap").hidden = $("aiProvider").value !== "custom";
+    $("aiExtraWrap").hidden = $("aiProvider").value !== "custom";
     if ($("aiProvider").value === "custom" && !$("aiUrl").value) {
       $("aiUrl").placeholder = "https://your-host/v1/chat/completions";
+    }
+    // Both come from the preset, so each provider is described in one place
+    // rather than in prose kept in step with it by hand. The link matters more
+    // than it looks: a key page can be several levels inside an account area,
+    // and someone who cannot find it cannot use the feature at all.
+    const help = $("aiKeyHelp");
+    help.textContent = preset.note ? preset.note + " " : "";
+    if (preset.keys) {
+      const link = document.createElement("a");
+      link.href = preset.keys;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = "Where to get a key ↗";
+      help.appendChild(link);
     }
   };
   $("aiProvider").value = cfg.provider || "deepseek";
   $("aiModel").value = cfg.model || "";
   $("aiUrl").value = cfg.url || "";
+  $("aiExtra").value = cfg.extra || "";
   $("aiKey").value = cfg.key || "";
   fill();
 
@@ -3187,18 +3375,36 @@ function setupAI() {
     if (saved && saved.provider !== $("aiProvider").value && $("aiKey").value === saved.key) {
       $("aiKey").value = "";
       $("aiModel").value = "";
+      // The one that actually redirected the request. Cleared here as well as
+      // ignored on save and on send, because a URL belonging to the previous
+      // provider is invisible under a named one -- the field is hidden.
+      $("aiUrl").value = "";
+      $("aiExtra").value = "";
       say(`Enter the key for ${$("aiProvider").value}.`);
     }
   });
   $("aiSettingsToggle").addEventListener("click", () => { $("aiPanel").hidden = !$("aiPanel").hidden; });
   $("aiSave").addEventListener("click", () => {
+    const custom = $("aiProvider").value === "custom";
     const next = {
       provider: $("aiProvider").value,
       model: $("aiModel").value.trim(),
-      url: $("aiUrl").value.trim(),
+      url: custom ? $("aiUrl").value.trim() : "",
+      extra: custom ? $("aiExtra").value.trim() : "",
       key: $("aiKey").value.trim()
     };
     if (!next.key) { say("A key is needed."); return; }
+    // Refused here rather than at the next question, where it would arrive as
+    // the provider's own complaint about a malformed request and read as this
+    // page's fault. Anything but an object would overwrite the messages.
+    if (next.extra) {
+      let parsed = null;
+      try { parsed = JSON.parse(next.extra); } catch {}
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        say("Extra request fields must be a JSON object, like {\"key\": \"value\"}.");
+        return;
+      }
+    }
     localStorage.setItem("kpi.ai", JSON.stringify(next));
     say(`Using ${next.provider}`);
     $("aiPanel").hidden = true;
@@ -3211,6 +3417,7 @@ function setupAI() {
       provider: $("aiProvider").value,
       model: $("aiModel").value.trim(),
       url: $("aiUrl").value.trim(),
+      extra: $("aiExtra").value.trim(),
       key: $("aiKey").value.trim()
     };
     if (!cfg.key) { say("Enter a key first."); return; }
@@ -3231,6 +3438,12 @@ function setupAI() {
   $("aiClear").addEventListener("click", () => {
     localStorage.removeItem("kpi.ai");
     $("aiKey").value = "";
+    // Emptying storage while leaving the form filled meant the next save wrote
+    // the old endpoint back, so forgetting a key did not undo a misconfigured
+    // provider -- which is the other thing this button gets pressed for.
+    $("aiModel").value = "";
+    $("aiUrl").value = "";
+    $("aiExtra").value = "";
     $("aiOut").innerHTML = "";
     say("Key forgotten.");
   });

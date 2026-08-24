@@ -105,6 +105,12 @@ async function fakeFetch(url, opts) {
   if (!step) throw new Error("model called more times than the script allows");
   calls.push({ kind: step.kind, system, user });
   if (step.throw) return { ok: false, status: 500, text: async () => "boom" };
+  // A refusal the page is meant to read rather than merely report. The body is
+  // the whole point: which limit was hit decides whether asking again is worth
+  // a second request.
+  if (step.fail) {
+    return { ok: false, status: step.fail.status, text: async () => step.fail.body };
+  }
   const reply = typeof step.reply === "function" ? step.reply(user) : step.reply;
   return {
     ok: true,
@@ -334,6 +340,47 @@ check("whitespace is not a narrowing", calls.at(-2).user.missing === undefined,
   JSON.stringify(calls.at(-2).user.missing));
 check("blind round keeps the earlier picks",
   Array.isArray(calls.at(-1).user.already_found) && calls.at(-1).user.already_found.length > 0);
+
+// === 11. a per-minute token ceiling shortens the question ==================
+// The free tiers that have one set it below what a full shortlist costs, so
+// the choice is a shorter question or none at all. The numbers come from the
+// provider: 8000 allowed against 9421 asked, over 40 candidates, is 30.
+script = [
+  { kind: "expand", reply: { terms: ["sync", "highlights"], language: "English" } },
+  { kind: "weigh", fail: { status: 429, body: JSON.stringify({ error: {
+      message: "Rate limit reached for model `x` on tokens per minute (TPM): "
+             + "Limit 8000, Used 0, Requested 9421. Please try again in 10s.",
+      type: "rate_limit_exceeded" } }) } },
+  { kind: "weigh", reply: takeFirst(80) }
+];
+document.getElementById("aiQuestion").value = "sync my highlights everywhere";
+await api.runAI();
+const full = calls.at(-2).user.candidates.length;
+const short = calls.at(-1).user.candidates.length;
+check("the ceiling costs exactly one extra request", script.length === 0, "left " + script.length);
+check("the second ask is shorter", short < full, short + " vs " + full);
+check("shortened by what the provider allowed", short === 30, String(short));
+check("an answer comes back", ids().length === 1, out().slice(0, 160));
+check("the answer says it was shortened", /shorter shortlist/i.test(out()), out().slice(0, 200));
+check("only what was sent is counted as weighed",
+  api.session.weighed === short, api.session.weighed + " vs " + short);
+
+// === 12. a 429 that asking for less cannot fix is not asked twice ==========
+// OpenAI puts an empty account under the same status as a rate limit and
+// separates them only in the body. Retrying that one spends a second request
+// to be told the same thing, which on a fifty-a-day key is a real price.
+script = [
+  { kind: "expand", reply: { terms: ["zotero"], language: "English" } },
+  { kind: "weigh", fail: { status: 429, body: JSON.stringify({ error: {
+      message: "You exceeded your current quota, please check your plan and billing details.",
+      type: "insufficient_quota" } }) } }
+];
+document.getElementById("aiQuestion").value = "access my zotero library";
+await api.runAI();
+check("a billing 429 is not retried", script.length === 0, "left " + script.length);
+check("and is named as credit, not as speed", /out of credit/i.test(out()), out().slice(0, 200));
+check("the provider's own words survive",
+  /check your plan and billing/i.test(out()), out().slice(0, 240));
 
 // Quiet when it passes, for the same reason parity_check.py is: a nightly log
 // nobody reads is a log that hides the one line that mattered.
