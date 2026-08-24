@@ -1166,7 +1166,7 @@ const PROVIDERS = {
   groq:       { url: "https://api.groq.com/openai/v1/chat/completions",
                 model: "openai/gpt-oss-120b", shape: "openai",
                 keys: "https://console.groq.com/keys",
-                note: "gpt-oss-120b costs nothing. The free tier caps tokens a minute, so a question may go out with a shorter shortlist — the answer says when it does.",
+                note: "gpt-oss-120b costs nothing, and its free tier has room for about a question a minute. A question may go out with a shorter shortlist; the answer says when it did, and a refusal says how long to wait.",
                 extra: { reasoning_effort: "low",
                          response_format: { type: "json_object" },
                          max_tokens: 1200 } },
@@ -1530,6 +1530,20 @@ function providerSaid(err) {
   return providerBody(err).slice(0, 160);
 }
 
+// How long until the same request would work. A rate-limit body spends its
+// first hundred and fifty characters on the model, the organisation and the
+// service tier, and puts the only actionable thing in it at the very end --
+// past where the sentence shown to anybody is cut. So it is pulled out and
+// said first. Minutes and seconds because Groq writes both, sometimes as
+// "1m13.2s"; rounded up, because telling someone to wait 7.2 seconds and
+// having them try at 7 is a second failure for the sake of a decimal point.
+function retryAfter(err) {
+  const said = providerBody(err);
+  const found = /try again in (?:([0-9]+)m)?([0-9]+(?:\.[0-9]+)?)s/i.exec(said);
+  if (!found) return 0;
+  return Math.ceil(Number(found[1] || 0) * 60 + Number(found[2]));
+}
+
 // A per-minute token ceiling is the only failure here that asking for less can
 // fix, and the free tiers that have one set it below what a full shortlist
 // costs -- so the choice is a shorter question or no answer, not a shorter
@@ -1611,8 +1625,14 @@ function describeFailure(err) {
     if (/insufficient_quota|exceeded your current quota|billing|out of credit/i.test(said)) {
       return and("The account is out of credit.", "The key works; there is nothing left to spend.");
     }
-    return and("Rate limited.",
-               "Too many requests, or too many tokens in one minute, for what this key is allowed.");
+    // Reached only after the trim has already tried and failed, which means
+    // the minute is spent rather than the question too big -- nothing about
+    // this request can be changed to make it work, and the only useful thing
+    // to say is when it would.
+    const wait = retryAfter(err);
+    return and("Rate limited.", wait
+      ? `The minute's allowance is spent. Asking again in ${wait} second${wait === 1 ? "" : "s"} will work.`
+      : "Too many requests, or too many tokens in one minute, for what this key is allowed.");
   }
   if (err.status >= 500) {
     return and("The provider had an error of its own.", "Nothing to fix here — try again shortly.");

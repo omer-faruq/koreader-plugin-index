@@ -408,7 +408,30 @@ check("which is smaller than what was refused", accepted < refused, accepted + "
 check("an answer comes back", ids().length === 1, out().slice(0, 160));
 check("the answer owns up to the shorter list", /shorter shortlist/i.test(out()), out().slice(0, 200));
 
-// === 14. the page says it is working while it waits =======================
+// === 14. a spent minute is not a big question, and says how long to wait ===
+// The trim cannot help here: the request is not too large, the window is
+// already used up. Groq puts the only actionable thing in the body at the very
+// end, past where the sentence shown to anybody is cut, so it is pulled out
+// and said first.
+script = [
+  { kind: "expand", reply: { terms: ["zotero"], language: "English" } },
+  { kind: "weigh", fail: { status: 429, body: JSON.stringify({ error: {
+      message: "Rate limit reached for model `openai/gpt-oss-120b` in organization "
+             + "`org_01jy8ghtpjfak8cgck2we4bp3t` service tier `on_demand` on tokens per "
+             + "minute (TPM): Limit 8000, Used 7480, Requested 6300. Please try again in 7.2s.",
+      type: "tokens", code: "rate_limit_exceeded" } }) } }
+];
+document.getElementById("aiQuestion").value = "access my zotero library please";
+await api.runAI();
+// 6300 asked against a limit of 8000: the question already fits, and a
+// shorter one would fit no better. The trim declines rather than spending a
+// request to prove it, which is the whole reason it reads the numbers.
+check("a request that already fits is not shortened", script.length === 0, "left " + script.length);
+check("a spent window is named as time, not size", /allowance is spent/i.test(out()), out().slice(0, 200));
+check("and the wait is rounded up off the decimal", /in 8 seconds/.test(out()), out().slice(0, 220));
+check("the model and organisation are not what leads", !/^\s*<div class="note"><b>[^<]*org_/.test(out()));
+
+// === 15. the page says it is working while it waits =======================
 // The only check here that looks at the screen mid-flight rather than after:
 // the scripted model reads aiOut at the moment it is called, which is exactly
 // when a reader on a slow free tier is looking at it and wondering whether
