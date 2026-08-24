@@ -1157,15 +1157,18 @@ const PROVIDERS = {
   //
   // 120b rather than 20b because both sit under the same ceiling and the same
   // daily allowance: the smaller model buys speed from a provider that is
-  // already the fastest here, and pays for it in judgement. No reasoning_effort
-  // -- Groq documents its reasoning parameters as mutually exclusive with JSON
-  // mode, and an untested combination does not belong in a shipped preset. The
-  // Extra request fields box is where to try it.
+  // already the fastest here, and pays for it in judgement. `reasoning_effort`
+  // buys the same speed without that trade -- ranking a shortlist against a
+  // stated question is not what a long reasoning trace is for -- and it was
+  // held back one release only because Groq documents reasoning parameters as
+  // mutually exclusive with JSON mode. That warning is about `reasoning_format`;
+  // this pair was tried against a real key and answers.
   groq:       { url: "https://api.groq.com/openai/v1/chat/completions",
                 model: "openai/gpt-oss-120b", shape: "openai",
                 keys: "https://console.groq.com/keys",
                 note: "gpt-oss-120b costs nothing. The free tier caps tokens a minute, so a question may go out with a shorter shortlist — the answer says when it does.",
-                extra: { response_format: { type: "json_object" },
+                extra: { reasoning_effort: "low",
+                         response_format: { type: "json_object" },
                          max_tokens: 1200 } },
   custom:     { url: "", model: "", shape: "openai" }
 };
