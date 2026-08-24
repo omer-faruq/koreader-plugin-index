@@ -5,7 +5,7 @@
 <!-- index-status:start -->
 > [!TIP]
 > ### [Search the index &nbsp;&rarr;](https://omer-faruq.github.io/koreader-plugin-index/)
-> **788 plugins &middot; 457 patches** across 109 repositories.
+> **789 plugins &middot; 457 patches** across 109 repositories.
 > Last full rebuild **2026-08-24**, diffed nightly.
 <!-- index-status:end -->
 
