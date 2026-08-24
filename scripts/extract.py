@@ -38,6 +38,140 @@ def clean_markdown(text):
     return text
 
 
+# ------------------------------------------------------------ script and language
+
+CJK_RE = re.compile(r"[぀-ヿ㐀-䶿一-鿿가-힯]")
+LATIN_RE = re.compile(r"[A-Za-z]")
+
+# Above this share of CJK a document is not something the scorer can read at
+# all: ranking tokenises on [a-z0-9]+, so Chinese text yields no tokens and the
+# entry scores zero against every query -- Chinese ones included. 57 of 752
+# plugins sat in that state, reachable only through the shortlist's tier filler.
+CJK_DOMINANT = 0.15
+
+# A line is judged by the same measure, because a line is a small document and
+# a second threshold would only be a second thing to tune. Getting this wrong
+# in either direction is easy to see: at one CJK character per line, "Open the
+# menu to find the 美术馆 / ArtGallery entry" reads as Chinese and the plugin
+# loses its own instructions; at half, "使用 WebDAV 同步" reads as English and
+# Chinese leaks into the purpose. The two populations separate cleanly around
+# this value -- English sentences carrying a Chinese proper noun sit at 0.02 to
+# 0.13, genuinely bilingual lines at 0.15 and above.
+CJK_LINE = CJK_DOMINANT
+
+
+def cjk_ratio(text):
+    """CJK characters as a share of the letters present.
+
+    Punctuation, digits and markup are not evidence of language either way, so
+    only letters are counted. A document with no letters at all is not
+    non-English; it is empty, and returns zero.
+    """
+    if not text:
+        return 0.0
+    han = len(CJK_RE.findall(text))
+    latin = len(LATIN_RE.findall(text))
+    return han / (han + latin) if han + latin else 0.0
+
+
+# A bilingual repository usually keeps the translation beside the README under
+# a name of its own. The search query asks for README.md by name, so these are
+# invisible to it -- but the root listing comes back in the same response, so
+# recognising one costs nothing. Every spelling found in the catalogue is
+# covered: README_en.md, README.en.md and README_EN.md.
+ENGLISH_README_RE = re.compile(
+    r"^readme[ ._-]?(en|eng|english|en[_-]?us|en[_-]?gb)\.(md|markdown|txt)$",
+    re.IGNORECASE)
+
+
+def english_readme_name(names):
+    """The translated README among a repository's root file names, if any."""
+    for name in names:
+        if ENGLISH_README_RE.match(name):
+            return name
+    return None
+
+
+# A Latin-script line is not an English line. In a Chinese README the Latin
+# characters are overwhelmingly paths, licence boilerplate, URLs and code, so
+# filtering by script alone produces confident nonsense: it gave dither256 the
+# purpose "`python tools/compile_mo.py locales/zh_CN.po`" and weread.koplugin
+# "Copyright (C) 2026 finlater and contributors." Both are worse than the empty
+# purpose they replaced, because a model reading one will describe the plugin
+# from it. A line has to read as a sentence to count.
+PROSE_WORD_RE = re.compile(r"\b[A-Za-z][a-z]{2,}\b")
+NOT_PROSE_RE = re.compile(
+    r"^(copyright|licen[cs]e|spdx|©|https?://|"
+    r"\S+\.(lua|py|md|zip|json|png|sh|bin|toml|ya?ml)\b)", re.IGNORECASE)
+LIST_MARKUP_RE = re.compile(r"^[#>\-*+\d.\s]+")
+
+# Five lowercase words is a sentence rather than a caption, and two such lines
+# is a section rather than a stray English sentence inside a Chinese one.
+PROSE_WORDS = 5
+PROSE_LINES = 2
+
+
+def _is_prose(line):
+    body = LIST_MARKUP_RE.sub("", line.strip())
+    if NOT_PROSE_RE.match(body):
+        return False
+    return len(PROSE_WORD_RE.findall(body)) >= PROSE_WORDS
+
+
+def english_blocks(readme):
+    """The runs of English prose in a bilingual README.
+
+    Bilingual READMEs come in two shapes: a switcher with the whole document
+    written twice, and a Chinese document with an English section appended.
+    Both split at their CJK lines, so what lies between those lines is the
+    candidate set -- and a block survives only if it holds actual sentences.
+
+    Fenced code is dropped rather than carried. It is stripped downstream
+    anyway, and splitting a fence at a Chinese comment inside it would leave an
+    unbalanced fence that the stripper then fails to remove, spilling the code
+    into a plugin's stated purpose.
+
+    The result stays markdown, because the callers are the ordinary purpose and
+    feature extractors and they read headings and bullets.
+    """
+    if not readme:
+        return ""
+    blocks, current, in_fence = [], [], False
+    for raw in readme.splitlines():
+        line = raw.strip()
+        if line.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        if line and cjk_ratio(line) > CJK_LINE:
+            blocks.append(current)
+            current = []
+            continue
+        current.append(raw)
+    blocks.append(current)
+
+    kept = [b for b in blocks
+            if sum(1 for line in b if _is_prose(line)) >= PROSE_LINES]
+    return "\n\n".join("\n".join(b).strip() for b in kept)
+
+
+def english_view(readme, sidecar=""):
+    """The text to extract from, when the README itself is not in English.
+
+    Three sources, best first: a translated sidecar README, which is the same
+    document and needs no filtering; the English blocks of a bilingual README;
+    and, failing both, the original. Returning the original is the honest
+    outcome -- a Chinese purpose at least reports what the repository says,
+    and no rule can turn a monolingual document into another language.
+    """
+    if sidecar and cjk_ratio(sidecar) < CJK_DOMINANT:
+        return sidecar
+    if cjk_ratio(readme) < CJK_DOMINANT:
+        return readme
+    return english_blocks(readme) or readme
+
+
 def extract_purpose(readme, limit=320, enough=110):
     """The opening prose, up to a useful length.
 

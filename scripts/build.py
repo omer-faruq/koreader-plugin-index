@@ -116,6 +116,42 @@ def readme_of(node):
     return "", 0
 
 
+def attach_english_readmes(client, nodes):
+    """Fetch the translated README of repositories that document in Chinese.
+
+    Ranking tokenises on [a-z0-9]+, so a Chinese README scores zero against
+    every query and its plugin reaches the AI shortlist only through the tier
+    filler -- which, for the two-star repositories this mostly affects, means
+    never. Where the repository publishes its own translation, that is the
+    whole problem solved with the repository's own words rather than a guess.
+
+    Detection is free: the root tree is already in the search response. Only
+    the few repositories that actually carry a sidecar cost a request, and in
+    August 2026 that was six out of 752.
+    """
+    wanted = []
+    for node in nodes.values():
+        readme, _ = readme_of(node)
+        if not readme or extract.cjk_ratio(readme) < extract.CJK_DOMINANT:
+            continue
+        entries = (node.get("root") or {}).get("entries") or []
+        name = extract.english_readme_name(
+            [e.get("name", "") for e in entries if e.get("type") == "blob"])
+        if name:
+            wanted.append((node, name))
+
+    if not wanted:
+        return
+    print(f"  {len(wanted)} non-English READMEs have a translation beside them")
+    for node, name in wanted:
+        blobs = client.fetch_files(node["owner"]["login"], node["name"],
+                                   [name], with_history=False)
+        blob = blobs.get(name)
+        if blob and blob.get("text"):
+            node["readmeEnglish"] = blob["text"]
+            print(f"    {node['nameWithOwner']}: {name}")
+
+
 def has_plugin_marker(node):
     """_meta.lua at the root, or a *.koplugin directory holding one.
 
@@ -136,15 +172,54 @@ def has_plugin_marker(node):
 
 def build_plugin(node, curation):
     readme, readme_bytes = readme_of(node)
+
+    # Every extracted field below comes from the English view of the README
+    # rather than the README itself: the translation beside it where there is
+    # one, the English sections of a bilingual document where there are any,
+    # and otherwise the original unchanged. The excerpt further down is the
+    # deliberate exception -- that panel shows the document as the repository
+    # wrote it, and a reader who follows the link should find what they read.
+    source = extract.english_view(readme, node.get("readmeEnglish", ""))
+    features = extract.extract_features(source)
+
+    # Filtering can leave less than it found. A bilingual README whose English
+    # side is all headings, tables and shell commands yields nothing at all,
+    # and publishing less than the previous run is not an improvement, so a
+    # view that produces neither purpose nor features hands the document back.
+    if not features and not extract.extract_purpose(source):
+        source = readme
+        features = extract.extract_features(source)
+
+    # The purpose falls back on its own, and separately. An English side made
+    # of bullets alone yields features but no opening prose, and returning the
+    # whole document there would throw those features away to recover a
+    # sentence no English query can reach. Splitting the two took the plugins
+    # left with no purpose at all from seven to none.
+    purpose_from_source = (extract.extract_purpose(source)
+                           or extract.extract_purpose(readme))
+
     topics = [t["topic"]["name"] for t in node["repositoryTopics"]["nodes"]]
-    headings = extract.extract_headings(readme)
+    headings = extract.extract_headings(source)
     description = node.get("description") or ""
 
     # README body terms feed the lightweight index too, not just the deep
     # search file: the sentence that says what a plugin does is usually well
     # past the first paragraph.
-    body_terms = extract.readme_terms(readme)
-    features = extract.extract_features(readme)
+    body_terms = extract.readme_terms(source)
+
+    # A Chinese purpose beside an English repository description is the one
+    # case where the weaker source is the better one. Every consumer reads
+    # `purpose or description` and stops at the first, so a good English
+    # sentence in the About field was being hidden behind text no English
+    # query could retrieve and no English reader could use. Nine plugins were
+    # in that state, several of them with a description better than anything
+    # extraction could have produced: "Turn your KOReader device into a file
+    # server (HTTP + WebDAV + FTP)".
+    purpose = purpose_from_source
+    if (extract.cjk_ratio(purpose) >= extract.CJK_DOMINANT
+            and description
+            and extract.cjk_ratio(description) < extract.CJK_DOMINANT):
+        purpose = description
 
     entry = {
         "id": node["nameWithOwner"],
@@ -152,7 +227,7 @@ def build_plugin(node, curation):
         "repo": node["name"],
         "url": node["url"],
         "description": description,
-        "purpose": extract.extract_purpose(readme),
+        "purpose": purpose,
         # Deliberately without body_terms. Feeding them in took `misc` from 33%
         # to 9%, but tagged 49% of the catalogue `ui` and 46% `files`: every
         # README says "copy the files" somewhere, and a chip matching half the
@@ -199,7 +274,7 @@ def build_plugin(node, curation):
             "readme_excerpt": extract.clean_markdown(readme)[:4000],
         }
         entry["detail"] = f"detail/{entry['owner']}__{entry['repo']}.json"
-    return entry, detail, extract.condense_readme(readme)
+    return entry, detail, extract.condense_readme(source)
 
 
 # ---------------------------------------------------------------------- patches
@@ -468,6 +543,7 @@ def main():
     print("collecting plugins…")
     nodes = collect_plugins(client, since)
     print(f"  {len(nodes)} repositories returned")
+    attach_english_readmes(client, nodes)
 
     entries, details, readmes = {}, {}, {}
 

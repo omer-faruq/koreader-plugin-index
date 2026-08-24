@@ -226,11 +226,16 @@ class Client:
 
     # ------------------------------------------------------------------- files
 
-    def fetch_files(self, owner, name, paths, batch=20):
+    def fetch_files(self, owner, name, paths, batch=20, with_history=True):
         """Blob text plus last-commit date for each path, keyed by path.
 
         Batched because a single query with sixty aliases is both slow and
         easy for GitHub to reject; twenty files per request stays comfortable.
+
+        `with_history` buys the per-path commit date, which for a patch file is
+        a safety signal worth a second sub-query. A translated README is not
+        judged on its own staleness -- the repository's push date already
+        covers that -- so its caller turns the history off and halves the query.
         """
         result = {}
         for start in range(0, len(paths), batch):
@@ -242,11 +247,12 @@ class Client:
                     f'    f{i}: object(expression: {literal}) '
                     f'{{ ... on Blob {{ text byteSize oid }} }}'
                 )
-                parts.append(
-                    f'    h{i}: defaultBranchRef {{ target {{ ... on Commit {{ '
-                    f'history(first: 1, path: {_gql_string(path)}) '
-                    f'{{ nodes {{ committedDate }} }} }} }} }}'
-                )
+                if with_history:
+                    parts.append(
+                        f'    h{i}: defaultBranchRef {{ target {{ ... on Commit {{ '
+                        f'history(first: 1, path: {_gql_string(path)}) '
+                        f'{{ nodes {{ committedDate }} }} }} }} }}'
+                    )
             query = FILES_QUERY_HEAD + "\n".join(parts) + FILES_QUERY_TAIL
 
             data = self.graphql(query, {"owner": owner, "name": name})
