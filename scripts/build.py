@@ -154,6 +154,7 @@ def attach_english_readmes(client, nodes):
         blob = blobs.get(name)
         if blob and blob.get("text"):
             node["readmeEnglish"] = blob["text"]
+            node["readmeEnglishName"] = name
             print(f"    {node['nameWithOwner']}: {name}")
 
 
@@ -181,10 +182,10 @@ def build_plugin(node, curation):
     # Every extracted field below comes from the English view of the README
     # rather than the README itself: the translation beside it where there is
     # one, the English sections of a bilingual document where there are any,
-    # and otherwise the original unchanged. The excerpt further down is the
-    # deliberate exception -- that panel shows the document as the repository
-    # wrote it, and a reader who follows the link should find what they read.
-    source = extract.english_view(readme, node.get("readmeEnglish", ""))
+    # and otherwise the original unchanged. The excerpt panel further down
+    # follows the same rule with one boundary of its own, explained there.
+    sidecar = node.get("readmeEnglish", "")
+    source = extract.english_view(readme, sidecar)
     features = extract.extract_features(source)
 
     # Filtering can leave less than it found. A bilingual README whose English
@@ -283,12 +284,26 @@ def build_plugin(node, curation):
     entry = apply_curation(entry, curated)
     entry["tier"], entry["tier_reasons"] = extract.tier_of(entry, curated.get("tier"))
 
+    # The excerpt panel follows the same rule as everything else, with one
+    # boundary. A translated README the repository publishes itself is the same
+    # document in the reader's language, and this site is read in English -- so
+    # showing the Chinese one there served nobody, and the panel names the file
+    # it came from so following the link holds no surprise. The English
+    # *sections* of a bilingual README are a different matter: they are
+    # fragments, and fragments presented as "the README" are worse than the
+    # document, so those still show the original.
+    excerpt_source = readme
+    excerpt_name = None
+    if sidecar and source is sidecar:
+        excerpt_source, excerpt_name = sidecar, node.get("readmeEnglishName")
+
     detail = None
     if readme:
         detail = {
             "id": entry["id"],
             "headings": headings,
-            "readme_excerpt": extract.clean_markdown(readme)[:4000],
+            "readme_excerpt": extract.clean_markdown(excerpt_source)[:4000],
+            **({"readme_source": excerpt_name} if excerpt_name else {}),
         }
         entry["detail"] = f"detail/{entry['owner']}__{entry['repo']}.json"
     return entry, detail, extract.condense_readme(source)

@@ -72,6 +72,13 @@ jobs:
       - name: Coverage gate
         run: python tests/coverage_gate.py
 
+      # build_plugin decides what a README becomes, and handles four shapes of
+      # document differently with a fallback behind each. Nothing else covers
+      # it: the query suite reads a finished index and cannot see how a field
+      # was arrived at.
+      - name: README shapes
+        run: python tests/readme_shapes.py
+
       # The page reimplements rank.py in JavaScript. If they drift, the quality
       # suite keeps passing while users see different results.
       - name: Ranking parity

@@ -2481,8 +2481,15 @@ function bindReadme(root, entries) {
         if (!resp.ok) throw new Error(resp.status);
         const detail = await resp.json();
         const text = (detail.readme_excerpt || "").trim();
+        // Named when it is not README.md. A repository that documents itself in
+        // another language and publishes its own translation gets the
+        // translation shown here, because this page is read in English -- but
+        // the panel says which file that was, so following the link to a
+        // different-looking document is not a surprise.
+        const from = detail.readme_source
+          ? `${esc(detail.readme_source)} excerpt` : "README excerpt";
         panel.innerHTML =
-          `<div class="head">README excerpt — see GitHub for the full document</div>` +
+          `<div class="head">${from} — see GitHub for the full document</div>` +
           esc(text || "This repository's README had no readable prose.");
         panel.dataset.loaded = "1";
       } catch (err) {
