@@ -1447,6 +1447,66 @@ async function expandQuery(cfg, question) {
 // throws it away.
 let aiSession = null;
 
+// How often AI Mode is actually asked anything. Nothing else on the page can
+// answer that: Pages keeps no server log, the beacon is the only thing that
+// reports back, and what it reports is a page view stripped of its query
+// string -- so a question and a scroll through the browse list arrive as the
+// same URL and are the same event. The count has to be made somewhere with a
+// path of its own, and ai-search/ is that path: an empty page carrying the
+// same beacon, loaded out of sight, once per question. Its views are the
+// questions.
+//
+// The counterpart would have been history.pushState to a made-up path, which
+// the beacon's routing hook does report and which needs no second file. It
+// leaves a history entry behind, and an entry the reader never navigated to
+// is a dead press of the back button. The whole view is written with
+// replaceState for exactly that reason. One file is the cheaper price.
+//
+// The question does not travel. Not its words, not its language, not the
+// catalogue, not the answer -- the URL is a constant and the beacon is
+// cookieless, so this can say how many and can never say who or what.
+function countQuestionAsked() {
+  // Counting must never be able to stop the asking. Every failure here --
+  // no iframe, a blocked beacon, a stub DOM under the tests -- is a number
+  // not written down, and a number not written down is not worth an error
+  // the reader would see instead of an answer.
+  try {
+    const frame = document.createElement("iframe");
+    frame.setAttribute("aria-hidden", "true");
+    frame.setAttribute("tabindex", "-1");
+    frame.setAttribute("title", "");
+    // Same origin as the page, so the default policy would put the whole front
+    // page URL in the Referer of this request -- including the ?q= someone
+    // left in the filter box, which until now had reached no server at all
+    // because it is written with replaceState and never navigated to. Sending
+    // it to a log now, as the price of counting, would be exactly the trade
+    // this was built to avoid. The beacon reads document.referrer and will
+    // find it empty; it does not need it, since the number wanted here is of
+    // the path and not of where it was reached from.
+    frame.setAttribute("referrerpolicy", "no-referrer");
+    frame.style.display = "none";
+    // Relative, so this keeps working on a fork, on a local file and behind
+    // whatever prefix the site is served under. No query string: the beacon
+    // would strip one anyway, and adding one would only invite the belief
+    // that something about the question could be smuggled along.
+    //
+    // Set before the frame goes into the document, and it has to stay that
+    // way. An iframe already on the page navigating away from about:blank is
+    // a navigation like any other and can leave a session history entry
+    // behind it -- which is the back button cost this whole approach was
+    // chosen over pushState to avoid. Loaded already pointed somewhere, the
+    // first load is a replace and costs nothing.
+    frame.src = "ai-search/";
+    document.body.appendChild(frame);
+    // Gone once the beacon has had its chance. Long enough that no send is
+    // cut off; short enough that a long session does not end up holding a
+    // hidden document per question asked.
+    setTimeout(() => frame.remove(), 15000);
+  } catch (err) {
+    /* not worth a word to the reader */
+  }
+}
+
 async function runAI() {
   const question = $("aiQuestion").value.trim();
   const cfg = aiConfig();
@@ -1456,6 +1516,13 @@ async function runAI() {
     return;
   }
   if (!question) { $("aiQuestion").focus(); return; }
+
+  // Below the guards, so what is counted is a question that is really about to
+  // be put to a model -- not an empty box and not a reader who has yet to add
+  // a key. Above the work, so a question that fails still counts as asked:
+  // what is being measured is the reaching for AI Mode, and a reader whose
+  // provider was down reached for it just as hard as one who got an answer.
+  countQuestionAsked();
 
   // Retrieval runs on the question, not on whatever is in the filter box. The
   // two are independent inputs and writing a paragraph must not disturb the

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Mode — asked</title>
+
+<!-- A counter, not a page.
+     ==========================
+     The finder runs on Pages, which keeps no server log, so the only thing
+     that ever reports a visit is the Cloudflare beacon on the front page --
+     and what it reports is a page view: an origin and a path. It strips the
+     query string and the fragment before sending, so no marker written into
+     the URL of the front page can be told apart from the front page itself.
+     A question asked of AI Mode therefore cannot be counted where it happens.
+     It has to be counted somewhere else, and "somewhere else" has to be a
+     path of its own. This is that path. The finder loads it out of sight in
+     an iframe once per question, the beacon below reports one view of
+     /ai-search/, and the number of views of this path is the number of
+     questions AI Mode was asked.
+
+     What travels with it: nothing. Not the question, not its language, not
+     the catalogue it was asked of, not the answer, not who asked. The beacon
+     is the same cookieless one the front page carries and it sends this URL,
+     which is the same URL every time. The count is a count and cannot become
+     a record of anyone, which is the only footing on which the front page's
+     promise about collecting nothing survives counting anything at all.
+
+     Read the number the way the front page's own is read -- as a trend, not a
+     headcount. This host sits on the common blocklists and these readers block
+     at well above the usual rate, so the ratio of this path to the front page
+     is worth more than either total.
+
+     Nobody is meant to arrive here. If someone does -- a stray link, a history
+     entry, a crawler that ignored the noindex -- the page says what it is and
+     points home rather than sitting blank. It must never redirect: a redirect
+     would land on the front page and be counted there as a visit that nobody
+     made. -->
+<meta name="robots" content="noindex,nofollow">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    margin: 0; min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    padding: 2rem;
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 32rem; text-align: center; }
+  p { margin: 0 0 1rem; }
+</style>
+</head>
+<body>
+
+<main>
+  <p>This page exists so that questions asked of AI Mode can be counted
+     without anything about them being recorded.</p>
+  <p><a href="../">Go to the KOReader Plugin Finder</a></p>
+</main>
+
+<!-- The same beacon and the same token as the front page: one property, two
+     paths, and the dashboard tells them apart by path. A second token would
+     split the site across two dashboards and make the ratio -- the only part
+     of this worth reading -- something you had to work out by hand. -->
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "6efd8a24464042b5a0a81dfe296b7b8d"}'></script>
+
+</body>
+</html>
