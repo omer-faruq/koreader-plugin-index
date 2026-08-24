@@ -204,6 +204,52 @@ categories = ["content"]
 purpose = "Download and read works from Archive Of Our Own on the device. Unofficial."
 keywords = ["ao3", "archive of our own", "fanfiction"]
 
+# --- written in English for plugins that document themselves in Chinese.
+# --- Ranking tokenises on [a-z0-9]+, so these entries scored zero against
+# --- every query in any language and reached nobody. The rules now read a
+# --- translated README where a repository publishes one; these seven do not,
+# --- and they are the head of that tail -- 595, 115 and 44 stars among them.
+# --- Purpose only, and only what the README states. Tier is a judgement about
+# --- a plugin, not about its documentation, so it is left where the rules put
+# --- it: reading a README is not the same as having used the thing.
+
+[plugins."finlater/weread.koplugin"]
+categories = ["content", "sync"]
+purpose = "Read WeChat Reading (微信读书) books and official-account articles inside KOReader, with reading progress and reading time synced back to the account, and reviews, highlights and thoughts visible on the page. Brings the service to closed devices like Kindle and Kobo."
+keywords = ["weread", "wechat reading", "weixin", "chinese ebooks", "official accounts", "progress sync", "reading time"]
+note = "Unofficial client for a third-party service. The README states it is for personal study and warns that account bans are the user's own risk."
+
+[plugins."hesan1232/fanqie.koplugin"]
+categories = ["content"]
+purpose = "Read Fanqie (番茄小说) web novels on an e-ink device: QR-code login, bookshelf, chapter navigation, progress synced to the server, chapter pre-download and offline reading of what is cached."
+keywords = ["fanqie", "web novels", "chinese novels", "webnovel", "offline reading", "progress sync"]
+note = "Unofficial. Falls back across three content sources, two of which are third-party aggregators rather than the official API."
+
+[plugins."Merpyzf/pinyinime.koplugin"]
+categories = ["dict", "ui"]
+purpose = "Pinyin input method for KOReader's built-in Simplified Chinese keyboard: a candidate bar, whole-sentence input, full pinyin and five double-pinyin schemes, and personalised learning. An enhancement layer over the existing keyboard rather than a replacement, and it works entirely offline."
+keywords = ["pinyin", "input method", "ime", "chinese keyboard", "shuangpin", "double pinyin", "candidate bar", "offline dictionary"]
+
+[plugins."miumiupy98-art/weread.koplugin-fixed"]
+categories = ["content", "notes"]
+purpose = "Enhanced fork of QiuYukang/weread.koplugin for browsing, downloading and reading WeChat Reading books and official-account articles. Adds in-plugin QR login, saved credentials, EPUB export either clean or carrying highlights and thoughts, and manual OTA updates."
+keywords = ["weread", "wechat reading", "epub export", "highlights", "thoughts", "qr login"]
+
+[plugins."Mr54233/pickthought.koplugin"]
+categories = ["notes", "content"]
+purpose = "Pulls highlights and public thoughts from WeChat Reading and injects them into a local EPUB, aligned to the quoted text. Tap a dotted underline to read what other people wrote there. Replaces the book in place and keeps a .orig backup."
+keywords = ["weread", "wechat reading", "highlights", "annotations", "social reading", "epub injection"]
+
+[plugins."zhouwt/pinyin.koplugin"]
+categories = ["dict", "reading"]
+purpose = "Overlays pinyin above Chinese characters as you read, in the manner of Kindle's character annotation. Five levels control how common a character has to be before it is left unannotated, so only the unfamiliar ones are marked. EPUB, DOCX and HTML."
+keywords = ["pinyin", "chinese", "annotation", "ruby text", "phonetic", "learning chinese", "furigana"]
+
+[plugins."finlater/one.koplugin"]
+categories = ["content"]
+purpose = "Offline reader for the daily ONE (「ONE · 一个」, wufazhuce.com) publication: one image, one piece of writing and one question-and-answer each day, with the last seven days available on the device."
+keywords = ["one", "wufazhuce", "daily", "chinese magazine", "offline reading"]
+
 # ---------------------------------------------------------------- distinctions
 #
 # Pairs that look interchangeable and are not.
@@ -253,3 +299,11 @@ say = "Both follow characters through a book. X-Ray builds timelines and insight
 [[distinctions]]
 between = ["KORComic/comicreader.koplugin", "tachibana-shin/rakuyomi"]
 say = "Comic Reader improves how paged comics are displayed; Rakuyomi fetches manga from online sources. One is a reading experience, the other is where the content comes from."
+
+[[distinctions]]
+between = ["finlater/weread.koplugin", "miumiupy98-art/weread.koplugin-fixed", "Mr54233/pickthought.koplugin"]
+say = "All three reach WeChat Reading and they do different jobs. finlater's reads the service inside KOReader with progress and reading time synced back. The -fixed fork descends from a different upstream and leads with exporting books to EPUB, optionally carrying highlights and thoughts. PickThought does not read the service at all: it takes highlights and public thoughts and injects them into an EPUB you already have."
+
+[[distinctions]]
+between = ["Merpyzf/pinyinime.koplugin", "zhouwt/pinyin.koplugin"]
+say = "One word, opposite directions. Pinyin IME is for typing Chinese: it adds a candidate bar and sentence input to the keyboard. Pinyin for KOReader is for reading it: it prints pinyin above the characters on the page and types nothing."

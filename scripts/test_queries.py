@@ -105,6 +105,14 @@ def check_coverage(index):
 
 
 def main():
+    # The failure explanation prints stars and plugin names, and a Windows
+    # console defaults to cp1252 -- so the one path that says why a case failed
+    # died with a UnicodeEncodeError instead of saying anything, on the machine
+    # most likely to be reading it. The runner is UTF-8 and never saw this.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
     if not INDEX.exists():
         print(f"no index at {INDEX} -- run build.py first", file=sys.stderr)
         return 1

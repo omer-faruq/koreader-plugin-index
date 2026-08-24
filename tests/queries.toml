@@ -66,3 +66,18 @@ expect_top3 = ["mysticknits/pencil.koplugin"]
 [[case]]
 query = "text overlays on the reading screen"
 expect_top3 = ["AndyHazz/bookends.koplugin"]
+
+# Two plugins that document themselves in Chinese, asked for in English. Both
+# scored zero here until curation gave them an English purpose -- the first is
+# among the most-starred plugins in the catalogue and was unreachable by any
+# query in any language. These cases are the regression guard for that whole
+# class: if the English view of a non-English README stops working, or a
+# curated purpose is lost, they go red.
+
+[[case]]
+query = "read wechat reading books"
+expect_top3 = ["finlater/weread.koplugin", "miumiupy98-art/weread.koplugin-fixed"]
+
+[[case]]
+query = "chinese web novels"
+expect_top3 = ["hesan1232/fanqie.koplugin", "pengcw/legado.koplugin"]
