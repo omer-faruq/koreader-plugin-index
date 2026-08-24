@@ -1484,7 +1484,12 @@ async function callModel(cfg, system, user) {
     throw blocked;
   }
   if (!resp.ok) {
-    const failed = new Error(`${resp.status} ${(await resp.text()).slice(0, 200)}`);
+    // Long enough to reach the numbers. Groq spends the first hundred and fifty
+    // characters of a refusal naming the model, the organisation and the
+    // service tier, and only then says what the limit was and what was asked
+    // for -- which is the half the page acts on. What the reader is shown is
+    // trimmed separately, and stays short.
+    const failed = new Error(`${resp.status} ${(await resp.text()).slice(0, 500)}`);
     failed.status = resp.status;
     throw failed;
   }
@@ -1507,18 +1512,22 @@ async function callModel(cfg, system, user) {
 // key sent to the wrong host, a model that is not on the account -- all arrived
 // reading the same sentence. The status says which category; only the body says
 // which limit, which host, which field.
-function providerSaid(err) {
-  // The message is always "<status> <first 200 bytes of the body>".
+// The body as it arrived, minus the status this page put in front of it.
+// Everything that reads a failure for meaning reads this; what is shown to
+// somebody is `providerSaid`, which is the same thing cut to a sentence.
+function providerBody(err) {
   const raw = String(err.message || "").replace(/^[0-9]{3} */, "").trim();
   if (!raw) return "";
-  let said = raw;
-  // Truncation at 200 characters means the JSON often will not parse. That is
-  // fine: the raw fragment is still the most informative thing available.
+  // A body cut mid-object will not parse. That is fine: the fragment is still
+  // the most informative thing available, and both readers of this cope.
   try {
     const parsed = JSON.parse(raw);
-    said = parsed?.error?.message || parsed?.message || parsed?.error?.code || raw;
-  } catch {}
-  return String(said).slice(0, 160);
+    return String(parsed?.error?.message || parsed?.message || parsed?.error?.code || raw);
+  } catch { return raw; }
+}
+
+function providerSaid(err) {
+  return providerBody(err).slice(0, 160);
 }
 
 // A per-minute token ceiling is the only failure here that asking for less can
@@ -1536,8 +1545,14 @@ function providerSaid(err) {
 // the wording carries no numbers, thirty is the count measured to fit the
 // smallest free ceiling seen here.
 function shortlistUnderCeiling(err, count) {
-  if (err.status !== 429) return 0;
-  const said = providerSaid(err);
+  // Two statuses for one situation, and Groq uses both: 429 when the minute's
+  // allowance has been spent and waiting would clear it, 413 when this single
+  // request could never fit however long anyone waits. The second is the purer
+  // case for asking smaller -- there is nothing else that would ever help.
+  if (err.status !== 429 && err.status !== 413) return 0;
+  // Read from the whole body rather than the sentence shown on screen: the
+  // numbers sit past where that one is cut.
+  const said = providerBody(err);
   if (!/token/i.test(said)) return 0;
   const limit = Number((/\blimit\D{0,3}([0-9]+)/i.exec(said) || [])[1]);
   const asked = Number((/\brequested\D{0,3}([0-9]+)/i.exec(said) || [])[1]);
@@ -1576,6 +1591,12 @@ function describeFailure(err) {
   }
   if (err.status === 402) {
     return and("The account is out of credit.", "The key works; there is nothing left to spend.");
+  }
+  // Only reached when the shortlist could not be cut small enough to fit --
+  // the trim runs first and this is what is left to say.
+  if (err.status === 413) {
+    return and("The question was too large for this key.",
+               "Its per-minute token limit is below what a useful shortlist costs. A provider with more room will answer it.");
   }
   if (err.status === 404) {
     return and("The provider has no such model or endpoint.",

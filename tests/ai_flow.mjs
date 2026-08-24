@@ -382,7 +382,33 @@ check("and is named as credit, not as speed", /out of credit/i.test(out()), out(
 check("the provider's own words survive",
   /check your plan and billing/i.test(out()), out().slice(0, 240));
 
-// === 13. the page says it is working while it waits =======================
+// === 13. the same ceiling, refused before the minute rather than during it =
+// Groq answers a question it could never fit with 413 rather than 429, and
+// spends the first hundred and fifty characters naming the model, the
+// organisation and the service tier before saying what the limit was. Both
+// halves are load-bearing: the status has to be recognised, and the body has
+// to be kept long enough to still contain the numbers.
+script = [
+  { kind: "expand", reply: { terms: ["anki"], language: "English" } },
+  { kind: "weigh", fail: { status: 413, body: JSON.stringify({ error: {
+      message: "Request too large for model `openai/gpt-oss-120b` in organization "
+             + "`org_01jy8ghtpjfak8cgck2we4bp3t` service tier `on_demand` on tokens per "
+             + "minute (TPM): Limit 8000, Requested 10254, please reduce your message size "
+             + "and try again.",
+      type: "tokens", code: "rate_limit_exceeded" } }) } },
+  { kind: "weigh", reply: takeFirst(88) }
+];
+document.getElementById("aiQuestion").value = "anki integration for vocabulary";
+await api.runAI();
+const refused = calls.at(-2).user.candidates.length;
+const accepted = calls.at(-1).user.candidates.length;
+check("a 413 is treated as the ceiling it is", script.length === 0, "left " + script.length);
+check("and the numbers survived the body being cut", accepted === 28, String(accepted));
+check("which is smaller than what was refused", accepted < refused, accepted + " vs " + refused);
+check("an answer comes back", ids().length === 1, out().slice(0, 160));
+check("the answer owns up to the shorter list", /shorter shortlist/i.test(out()), out().slice(0, 200));
+
+// === 14. the page says it is working while it waits =======================
 // The only check here that looks at the screen mid-flight rather than after:
 // the scripted model reads aiOut at the moment it is called, which is exactly
 // when a reader on a slow free tier is looking at it and wondering whether
