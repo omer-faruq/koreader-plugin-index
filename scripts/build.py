@@ -482,6 +482,47 @@ def category_summary(entries):
     ]
 
 
+def coverage_of(plugins):
+    """How much of the catalogue an English query can actually reach.
+
+    Every other number this build reports counts what was found. This one
+    counts what was found and cannot be used, which is the failure mode the
+    index had no way to see: an entry documented in another script scores zero
+    against every query, and a search that quietly never returns it looks
+    exactly like a search with no answer. 57 plugins sat in that state for
+    months and nothing in the build said so.
+
+    Published in index.json rather than only printed, so the trend is
+    answerable later without re-deriving it -- the question "is this getting
+    better or worse" could not be asked at all before, and a number that only
+    ever appears in a log answers it no better than none.
+    """
+    counts = {"english": 0, "unreadable": 0, "silent": 0}
+    for entry in plugins:
+        counts[extract.readability(entry.get("purpose"),
+                                   entry.get("description"))] += 1
+    total = len(plugins) or 1
+    return {
+        "plugins": len(plugins),
+        **counts,
+        # Fewer than three keywords is not enough surface to be found by
+        # anything but the plugin's own name.
+        "thin_keywords": sum(1 for e in plugins if len(e.get("keywords") or []) < 3),
+        "english_share": round(counts["english"] / total, 4),
+    }
+
+
+def report_coverage(coverage):
+    total = coverage["plugins"] or 1
+    print(f"  reachable in English: {coverage['english']} "
+          f"({coverage['english'] / total:.1%})")
+    print(f"  documented but unreadable: {coverage['unreadable']} "
+          f"({coverage['unreadable'] / total:.1%})")
+    print(f"  no prose at all: {coverage['silent']} "
+          f"({coverage['silent'] / total:.1%})")
+    print(f"  fewer than three keywords: {coverage['thin_keywords']}")
+
+
 def sanity_check(plugins, patches, previous, previous_patches):
     """Refuse to publish a catalogue that collapsed.
 
@@ -592,6 +633,9 @@ def main():
 
     plugins = sorted(entries.values(), key=lambda e: (-e["stars"], e["id"].lower()))
 
+    coverage = coverage_of(plugins)
+    report_coverage(coverage)
+
     print("collecting patches…")
     patch_entries, patch_repos, patch_repos_seen = collect_patches(client, curation, since)
     # A diff run only sees repositories pushed recently, so patches from
@@ -621,6 +665,7 @@ def main():
             "patches": len(patches),
             "patch_repos": patch_repos,
         },
+        "coverage": coverage,
         # Plugins only. Counts are per tab, and a chip on the patches tab
         # claiming 151 interface entries when it can show none of the
         # plugin ones is worse than showing no count at all.

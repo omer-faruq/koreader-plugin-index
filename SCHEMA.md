@@ -36,6 +36,8 @@ version bump. `schema` increments only on a removal or a meaning change.
   "generated_at": "2026-08-15T03:07:41Z",
   "source_repo": "https://github.com/omer-faruq/koreader-plugin-index",
   "counts": { "plugins": 739, "patches": 612, "patch_repos": 122 },
+  "coverage": { "plugins": 752, "english": 696, "unreadable": 38, "silent": 18,
+                "thin_keywords": 34, "english_share": 0.9255 },
   "categories": [
     { "id": "sync", "label": "Sync", "count": 24 }
   ],
@@ -43,6 +45,13 @@ version bump. `schema` increments only on a removal or a meaning change.
   "patches_url": "patches.json"
 }
 ```
+
+`coverage` counts what the index holds but cannot be searched for. Ranking
+tokenises on `[a-z0-9]+`, so an entry whose only prose is in another script
+scores zero against every query — a failure that looks, from the outside,
+exactly like a search with no answer. `english` is reachable, `unreadable` is
+documented in a script the scorer cannot read, `silent` has no prose at all.
+The quality suite refuses to publish a run where these collapse.
 
 `generated_at` is what the page shows as *"Index: 15 Aug 2026"*. Consumers must
 display it — the index is deliberately stale between weekly runs, and saying so

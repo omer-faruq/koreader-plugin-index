@@ -64,6 +64,14 @@ jobs:
       - name: Quality tests
         run: python scripts/test_queries.py
 
+      # That suite now also refuses a catalogue that can no longer be searched,
+      # which is a failure the ranking cases cannot see: an entry scoring zero
+      # against every query appears in none of them. A gate that has never been
+      # watched trip is indistinguishable from no gate, so its thresholds are
+      # exercised directly against synthetic indexes.
+      - name: Coverage gate
+        run: python tests/coverage_gate.py
+
       # The page reimplements rank.py in JavaScript. If they drift, the quality
       # suite keeps passing while users see different results.
       - name: Ranking parity

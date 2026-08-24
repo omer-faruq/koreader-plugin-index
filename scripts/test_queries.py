@@ -62,15 +62,64 @@ def explain_failure(entries, query, expected, top):
             print(f"               purpose:  {(entry.get('purpose') or '')[:110]}")
 
 
+# Floors, not targets. Measured on the August 2026 catalogue: 92.6% of plugins
+# were reachable in English and 2.4% had no prose at all. These sit far enough
+# below that to survive the catalogue growing a Chinese-documented tail, and
+# close enough to catch the failure they exist for -- extraction silently
+# returning nothing, or the English view of a non-English README breaking and
+# taking a whole language back out of the index. A ratio rather than a count,
+# because the catalogue grows and a count would need editing every few months.
+MIN_ENGLISH_SHARE = 0.85
+MAX_SILENT_SHARE = 0.05
+
+
+def check_coverage(index):
+    """Refuse a run that can no longer be searched, whatever it ranks.
+
+    The query cases above measure whether the right answer wins. They cannot
+    see an entry that dropped out of contention entirely: a plugin scoring zero
+    against every query never appears in any case, so the suite stays green
+    while the catalogue quietly shrinks underneath it.
+    """
+    coverage = index.get("coverage")
+    if not coverage:
+        # An index built before coverage existed. Not a failure -- there is
+        # simply nothing to check, and saying so beats a confusing pass.
+        print("  no coverage block in the index; skipping")
+        return []
+    total = coverage.get("plugins") or 1
+    english = coverage["english"] / total
+    silent = coverage["silent"] / total
+    problems = []
+    print(f"  reachable in English {english:.1%} (floor {MIN_ENGLISH_SHARE:.0%})")
+    print(f"  no prose at all      {silent:.1%} (ceiling {MAX_SILENT_SHARE:.0%})")
+    if english < MIN_ENGLISH_SHARE:
+        problems.append(
+            f"only {english:.1%} of plugins are reachable in English, "
+            f"below the {MIN_ENGLISH_SHARE:.0%} floor")
+    if silent > MAX_SILENT_SHARE:
+        problems.append(
+            f"{silent:.1%} of plugins have no prose at all, "
+            f"above the {MAX_SILENT_SHARE:.0%} ceiling")
+    return problems
+
+
 def main():
     if not INDEX.exists():
         print(f"no index at {INDEX} -- run build.py first", file=sys.stderr)
         return 1
 
     with INDEX.open(encoding="utf-8") as handle:
-        entries = json.load(handle).get("plugins", [])
+        index = json.load(handle)
+    entries = index.get("plugins", [])
     with CASES.open("rb") as handle:
         cases = tomllib.load(handle).get("case", [])
+
+    print("coverage")
+    coverage_problems = check_coverage(index)
+    for problem in coverage_problems:
+        print(f"  FAIL  {problem}", file=sys.stderr)
+    print()
 
     print(f"{len(cases)} queries against {len(entries)} plugins\n")
 
@@ -91,8 +140,11 @@ def main():
             failures.append(query)
 
     print()
-    if failures:
-        print(f"{len(failures)}/{len(cases)} failed", file=sys.stderr)
+    if failures or coverage_problems:
+        if failures:
+            print(f"{len(failures)}/{len(cases)} failed", file=sys.stderr)
+        if coverage_problems:
+            print(f"{len(coverage_problems)} coverage floor(s) breached", file=sys.stderr)
         return 1
     print(f"all {len(cases)} passed")
     return 0

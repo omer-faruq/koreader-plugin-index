@@ -172,6 +172,27 @@ def english_view(readme, sidecar=""):
     return english_blocks(readme) or readme
 
 
+def readability(purpose, description=""):
+    """Whether an English query can reach this entry at all.
+
+    Three outcomes, and the middle one is the reason this function exists.
+    `english` is an entry the scorer can read. `silent` says extraction found
+    no prose anywhere, which is a fact about the repository. `unreadable` says
+    the repository documented itself and the index cannot use it -- the entry
+    scores zero against every query, in any language, and nothing about the
+    result looks like a failure from the outside.
+
+    That last state went unnoticed for months across 57 plugins because no
+    count of it existed. Naming it is what lets the build report it.
+    """
+    says = (purpose or description or "").strip()
+    if not says:
+        return "silent"
+    if cjk_ratio(says) >= CJK_DOMINANT:
+        return "unreadable"
+    return "english"
+
+
 def extract_purpose(readme, limit=320, enough=110):
     """The opening prose, up to a useful length.
 
