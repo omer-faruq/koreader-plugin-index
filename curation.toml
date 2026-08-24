@@ -250,6 +250,80 @@ categories = ["content"]
 purpose = "Offline reader for the daily ONE (「ONE · 一个」, wufazhuce.com) publication: one image, one piece of writing and one question-and-answer each day, with the last seven days available on the device."
 keywords = ["one", "wufazhuce", "daily", "chinese magazine", "offline reading"]
 
+# -------------------------------------------------------------------- glossary
+#
+# Concept words, Chinese to English, appended to the keywords of any entry whose
+# own text is Chinese. Not a translation: keywords are labels, and this never
+# writes prose or touches a purpose.
+#
+# Deliberately short, and deliberately not the frequent words. Counting terms
+# across the plugins that need this put 插件 (plugin), 安装 (install), 目录
+# (directory), 重启 (restart) and 许可证 (licence) at the top -- every README has
+# them, none of them tells a reader what a plugin does, and translating them
+# would fill the highest-weighted field in the index with noise. What earns a
+# line here is a word that says what the thing *is*, which is rarer per README
+# and shared across the ones that matter.
+#
+# Add a line when a Chinese-documented plugin turns up doing something this
+# list cannot name. Do not add product names that already appear in Latin in
+# the repository name -- weread, fanqie, legado and pixiv are all findable
+# already; what is missing is what they are, not what they are called.
+
+[glossary]
+# what a plugin is
+"屏保" = "screensaver sleep screen"
+"休眠屏幕" = "sleep screen screensaver"
+"壁纸" = "wallpaper"
+"输入法" = "input method keyboard ime"
+"双拼" = "double pinyin shuangpin"
+"注音" = "phonetic annotation ruby pinyin"
+"词库" = "dictionary lexicon wordlist"
+"翻页动画" = "page turn animation"
+"翻页" = "page turn"
+"电量" = "battery"
+"剪贴板" = "clipboard"
+"图标" = "icon"
+"漫画" = "comic manga"
+"小说" = "novel fiction"
+"公众号" = "official account article feed"
+"番茄钟" = "pomodoro focus timer"
+"专注" = "focus"
+"截图" = "screenshot"
+"字体" = "font typeface"
+"排版" = "typesetting layout"
+"抖动" = "dithering"
+"灰度" = "greyscale"
+
+# what a plugin does
+"同步" = "sync"
+"进度" = "reading progress"
+"划线" = "highlight"
+"笔记" = "note annotation"
+"书签" = "bookmark"
+"书架" = "bookshelf library"
+"封面" = "cover"
+"章节" = "chapter"
+"统计" = "statistics"
+"阅读时长" = "reading time"
+"翻译" = "translation"
+"生词" = "vocabulary unfamiliar words"
+"朗读" = "text to speech read aloud"
+"缓存" = "cache offline"
+"离线" = "offline"
+"登录" = "login sign in"
+"扫码" = "qr code login"
+"备份" = "backup"
+"云盘" = "cloud storage"
+"服务器" = "server"
+
+# services a Latin repository name does not explain
+"微信读书" = "wechat reading weread chinese ebook service"
+"知乎" = "zhihu chinese question and answer site"
+"日报" = "daily digest news"
+"起点" = "qidian chinese web novel site"
+"豆瓣" = "douban books"
+"坚果云" = "jianguoyun nutstore webdav"
+
 # ---------------------------------------------------------------- distinctions
 #
 # Pairs that look interchangeable and are not.

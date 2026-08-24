@@ -80,6 +80,11 @@ def load_curation():
         "plugins": data.get("plugins", {}),
         "patches": data.get("patches", {}),
         "distinctions": data.get("distinctions", []),
+        # Longest key first, so 微信读书 is considered before 读书. Both may
+        # match and both labels are true, but the order keeps the specific
+        # label ahead of the general one in a list that gets truncated.
+        "glossary": dict(sorted(data.get("glossary", {}).items(),
+                                key=lambda kv: -len(kv[0]))),
     }
 
 
@@ -206,6 +211,15 @@ def build_plugin(node, curation):
     # search file: the sentence that says what a plugin does is usually well
     # past the first paragraph.
     body_terms = extract.readme_terms(source)
+    # Where a document says what it *is*: the opening prose and the headings.
+    # Run over the whole README instead, one passing mention of 漫画 in a long
+    # Chinese document made that plugin a comic reader, and legado.koplugin --
+    # which mentions nearly everything -- outranked comicreader.koplugin on
+    # "comic reader". The same reasoning already keeps body terms out of
+    # categorisation a few lines below.
+    identity = " ".join([extract.extract_purpose(readme) or ""]
+                        + extract.extract_headings(readme))
+    glossed = extract.glossary_keywords(identity, curation.get("glossary", {}))
 
     # A Chinese purpose beside an English repository description is the one
     # case where the weaker source is the better one. Every consumer reads
@@ -241,8 +255,11 @@ def build_plugin(node, curation):
         # What a plugin can actually do usually lives in the feature list, not
         # the opening slogan. Carried in the index so every consumer gets it.
         "features": features,
+        # The glossary reaches the original README rather than the English
+        # view: it exists precisely for the documents no view could make
+        # English, and matches nothing in one that already is.
         "keywords": extract.keywords(description, topics, headings,
-                                     extra=body_terms + features),
+                                     extra=body_terms + features + glossed),
         "topics": topics,
         "stars": node["stargazerCount"],
         "forks": node["forkCount"],

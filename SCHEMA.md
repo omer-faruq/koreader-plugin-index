@@ -106,7 +106,7 @@ The unit is a **repository**.
 | `owner`, `repo` | Kept split so the page can build the AppStore handoff link (`index.html?tab=plugins&owner=…&q=…`) without parsing `id`. |
 | `description` | GitHub's own one-liner, verbatim. |
 | `purpose` | First meaningful README paragraph, trimmed. Empty string when the README gives nothing usable — never invented. Read from the English view of the README rather than the file itself: a `README_en.md` beside it, or the English sections of a bilingual document. Where that leaves a Chinese sentence and GitHub's own description is in English, the description is used instead — every consumer reads `purpose or description` and stops at the first, so the better line would otherwise never be seen. |
-| `keywords` | Match surface for search. Union of topics, description words, and README headings, after stop-word removal. |
+| `keywords` | Match surface for search. Union of topics, description words, and README headings, after stop-word removal. For a plugin documented in another script, the `[glossary]` table in `curation.toml` adds English labels for the concepts its opening prose and headings name — labels, never prose, and never a `purpose`. |
 | `has_meta` | `_meta.lua` present in the repo root. The single strongest "this is a real KOReader plugin" signal. |
 | `detail` | Relative path, or `null` when there is nothing beyond what is inlined here. |
 

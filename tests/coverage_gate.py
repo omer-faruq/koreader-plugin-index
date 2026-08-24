@@ -1,4 +1,9 @@
-"""Prove the coverage gate fires.
+"""Prove the machinery that decides whether an entry can be found at all.
+
+Two mechanisms, tested together because they answer one question and nothing
+else in the suite covers either: the coverage gate, and the glossary that gives
+a Chinese-documented plugin an English match surface.
+
 
 A gate nobody has watched trip is indistinguishable from no gate at all, and
 this one exists precisely to catch a failure that is invisible from the
@@ -6,8 +11,8 @@ outside: entries the scorer cannot read score zero against every query, so the
 ranking suite stays green while the searchable catalogue shrinks underneath it.
 If that gate were itself broken, nothing else here would notice.
 
-Runs offline against synthetic indexes -- the point is the threshold logic, not
-the catalogue.
+Runs offline against synthetic inputs -- the point is the logic, not the
+catalogue.
 """
 
 import pathlib
@@ -89,6 +94,34 @@ def extraction_returning_nothing_fails():
            f"expected the silent ceiling to trip, got {problems}")
 
 
+GLOSSARY = {"微信读书": "wechat reading", "屏保": "screensaver sleep screen",
+            "读书": "reading"}
+
+
+def glossary_labels_a_chinese_document():
+    got = extract.glossary_keywords("在 KOReader 上阅读微信读书中的书籍", GLOSSARY)
+    expect("wechat" in got and "reading" in got, got)
+
+
+def glossary_ignores_an_english_document():
+    """The property that lets the caller apply this unconditionally."""
+    expect(extract.glossary_keywords(ENGLISH, GLOSSARY) == [], "English must match nothing")
+    expect(extract.glossary_keywords("", GLOSSARY) == [], "empty text must match nothing")
+    expect(extract.glossary_keywords(CHINESE, {}) == [], "an empty glossary must add nothing")
+
+
+def glossary_does_not_repeat_itself():
+    """微信读书 contains 读书; both fire, and 'reading' is still listed once."""
+    got = extract.glossary_keywords("微信读书", GLOSSARY)
+    expect(len(got) == len(set(got)), got)
+
+
+def glossary_is_bounded():
+    big = {f"詞{i}": f"word{i}" for i in range(50)}
+    got = extract.glossary_keywords("".join(big), big, limit=12)
+    expect(len(got) <= 12, f"limit ignored: {len(got)}")
+
+
 def old_index_skips_rather_than_failing():
     expect(test_queries.check_coverage({"plugins": []}) == [],
            "an index built before coverage existed must not fail the build")
@@ -102,6 +135,10 @@ for name, fn in [
     ("a language dropping out fails the build", a_language_dropping_out_fails),
     ("extraction returning nothing fails the build", extraction_returning_nothing_fails),
     ("an index without coverage is skipped", old_index_skips_rather_than_failing),
+    ("the glossary labels a Chinese document", glossary_labels_a_chinese_document),
+    ("the glossary ignores an English one", glossary_ignores_an_english_document),
+    ("the glossary does not repeat a label", glossary_does_not_repeat_itself),
+    ("the glossary respects its limit", glossary_is_bounded),
 ]:
     case(name, fn)
 

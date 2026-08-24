@@ -172,6 +172,35 @@ def english_view(readme, sidecar=""):
     return english_blocks(readme) or readme
 
 
+def glossary_keywords(text, glossary, limit=12):
+    """English labels for the concepts a Chinese document names.
+
+    Not a translation. The scorer needs something to match on, and a keyword is
+    a label rather than a claim -- so this adds words to the match surface and
+    never writes a sentence or touches a purpose. A plugin whose README only
+    ever says 屏保 becomes findable by "screensaver" while still, honestly,
+    having no English description of itself.
+
+    Substring matching, because Chinese is written without spaces and there is
+    no boundary to anchor to. Overlapping keys are not a problem: 微信读书 and
+    读书 can both fire, and both labels are true.
+
+    Self-limiting on English input -- a document with no CJK in it matches
+    nothing here, so this needs no guard at the call site.
+    """
+    if not text or not glossary:
+        return []
+    found, seen = [], set()
+    for term, english in glossary.items():
+        if term not in text:
+            continue
+        for word in english.split():
+            if word not in seen:
+                seen.add(word)
+                found.append(word)
+    return found[:limit]
+
+
 def readability(purpose, description=""):
     """Whether an English query can reach this entry at all.
 
