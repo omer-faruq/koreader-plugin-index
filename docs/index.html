@@ -438,7 +438,15 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
 .ai-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .ai-head .section-title { margin-bottom: 0; }
 .ai-result { border-left: 3px solid var(--accent); padding-left: 12px; margin-bottom: 16px; }
-.ai-why { font-size: .85rem; color: var(--muted); margin: 4px 0 0; }
+.ai-why { font-size: .85rem; color: var(--muted); margin: 11px 0 0; }
+/* The keyword list's answer to the same question the AI mode answers with
+   ai-why: why this card and not the one that looks like it. Stated under the
+   entry it is about, so the pair it names is never left to be guessed. */
+.distinction {
+  margin: 11px 0 0; padding-left: 11px; border-left: 2px solid var(--border);
+  font-size: .85rem; color: var(--muted);
+}
+.distinction b { display: block; color: var(--text); margin-bottom: 2px; }
 /* The ranking is the answer to "which one first?", so it is stated rather than
    left to be inferred from the order. */
 .ai-rank { display: block; font-size: .72rem; text-transform: uppercase;
@@ -1804,8 +1812,7 @@ function renderAnswer(session) {
       return `<div class="ai-result"><span class="ai-rank">${
         i === 0 ? "Best match" : `#${i + 1}`}${
         p.score != null ? ` · fit ${Math.round(p.score)}` : ""}</span>${
-        card(entry, tokens)
-          .replace("</article>", `<p class="ai-why">${esc(p.why || "")}</p></article>`)}</div>`;
+        card(entry, tokens, `<p class="ai-why">${esc(p.why || "")}</p>`)}</div>`;
     }).join("") +
     againLine(session) +
     (weak ? otherCatalogueNote() : "");
@@ -1942,8 +1949,7 @@ function renderShared(payload) {
       return `<div class="ai-result"><span class="ai-rank">${
         i === 0 ? "Best match" : `#${i + 1}`}${
         p.score != null ? ` · fit ${Math.round(p.score)}` : ""}</span>${
-        card(entry, tokens)
-          .replace("</article>", `<p class="ai-why">${esc(p.why)}</p></article>`)}</div>`;
+        card(entry, tokens, `<p class="ai-why">${esc(p.why)}</p>`)}</div>`;
     }).join("") +
     (missing.length
       ? `<div class="note info"><b>${missing.length} no longer in the index</b>${
@@ -2220,7 +2226,7 @@ function tierLabel(entry) {
   return "unverified";
 }
 
-function card(entry, tokens) {
+function card(entry, tokens, note) {
   const why = explain(entry, tokens);
   const patch = isPatch(entry);
   const stars = patch ? entry.repo_stars : entry.stars;
@@ -2248,6 +2254,7 @@ function card(entry, tokens) {
       ${(entry.categories || []).map(c => `<span class="badge">${esc(c)}</span>`).join("")}
       ${why.length ? `<span class="why">matched <span>${why.map(esc).join(", ")}</span></span>` : ""}
     </div>
+    ${note || ""}
     <div class="actions">
       <button class="act" data-install="${esc(entry.id)}" title="How to install this on your device">
         <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
@@ -2268,30 +2275,44 @@ function listOf(names) {
 }
 
 /* Distinctions are the part of the catalogue a README cannot produce. They are
-   surfaced exactly when two entries that look alike are both on screen. */
-function noteFor(shown, tokens) {
-  // Only while someone is actually choosing between the two. Without a query
-  // the listing leads with the curated set, so every pair was on screen at
-  // once and all four notes fired before the reader had asked anything.
-  if (!tokens.length) return "";
-  const here = shown.slice(0, 8);
-  const ids = new Set(here.map(e => e.id));
+   surfaced exactly when two entries that look alike are both on screen -- and
+   under the cards they are about, one copy per entry, the way the AI mode
+   prints its reason under each pick. Stacked at the top of the results they
+   read as "both of them do X" over a list of thirty cards, and which two were
+   meant had to be worked out from the names in the heading. Anchored to a
+   card, the entry is the one the reader is already looking at and the note
+   only has to name what it is being told apart from.
+
+   Returns a Map of entry id -> note HTML, since one entry can appear in more
+   than one distinction. */
+function distinctionNotes(shown) {
+  const ids = new Set(shown.map(e => e.id));
+  const shortOf = e => (isPatch(e) ? e.path : e.repo);
+  // Two of the pairs worth telling apart are two projects of the same name by
+  // different authors, and "not the same as zlibrary.koplugin" printed under
+  // zlibrary.koplugin names nothing at all. Where the short name is shared on
+  // screen the owner comes with it, which is what the card head prints anyway.
+  const seen = new Map();
+  for (const e of shown) seen.set(shortOf(e), (seen.get(shortOf(e)) || 0) + 1);
   const nameOf = id => {
-    const e = here.find(x => x.id === id);
-    return e ? (isPatch(e) ? e.path : e.repo) : id.split("/").pop();
+    const e = shown.find(x => x.id === id);
+    if (!e) return id.split("/").pop();
+    return seen.get(shortOf(e)) > 1 ? `${e.owner}/${shortOf(e)}` : shortOf(e);
   };
-  return (state.index.distinctions || [])
-    .map(d => [d, (d.between || []).filter(x => ids.has(x))])
-    .filter(([, pair]) => pair.length >= 2)
-    // Named in the heading, always. Several of these notes read as "both of
-    // them do X" without ever saying which two, and stacked under a search
-    // that returned thirty cards they leave the reader looking for a pair
-    // that was never identified. The names are the ones printed on the cards,
-    // and only the entries actually on screen are listed: a note about five
-    // lookalikes should point at the ones the reader is choosing between.
-    .map(([d, pair]) => `<div class="note info"><b>Similar, but not the same: ${
-      esc(listOf(pair.map(nameOf)))}</b>${esc(d.say)}</div>`)
-    .join("");
+  const notes = new Map();
+  for (const d of state.index.distinctions || []) {
+    // Only the entries actually on screen: a note about five lookalikes
+    // should point at the ones the reader is choosing between.
+    const pair = (d.between || []).filter(x => ids.has(x));
+    if (pair.length < 2) continue;
+    for (const id of pair) {
+      const others = pair.filter(x => x !== id);
+      notes.set(id, (notes.get(id) || "") +
+        `<p class="distinction"><b>Similar, but not the same as ${
+          esc(listOf(others.map(nameOf)))}</b>${esc(d.say)}</p>`);
+    }
+  }
+  return notes;
 }
 
 function render() {
@@ -2370,7 +2391,7 @@ function render() {
        here works without it.</div>`
     : "";
 
-  $("notes").innerHTML = warning + hint + (list.length ? noteFor(list, tokens) : "");
+  $("notes").innerHTML = warning + hint;
   if ($("hintOpen")) {
     $("hintOpen").addEventListener("click", () => $("askAi").click());
   }
@@ -2404,9 +2425,14 @@ function render() {
     return;
   }
 
+  // Only while someone is actually choosing between the two. Without a query
+  // the listing leads with the curated set, so every pair is on screen at once
+  // and every note fires before the reader has asked anything.
+  const notes = tokens.length ? distinctionNotes(list) : new Map();
+
   $("results").innerHTML =
     (tokens.length ? "" : `<div class="section-title">${esc(heading)}</div>`) +
-    list.map(e => card(e, tokens)).join("");
+    list.map(e => card(e, tokens, notes.get(e.id))).join("");
 
   bindReadme($("results"), list);
   syncUrl();
