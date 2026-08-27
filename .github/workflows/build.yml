@@ -79,6 +79,13 @@ jobs:
       - name: README shapes
         run: python tests/readme_shapes.py
 
+      # How far back a diff looks is decided once a night, in a run nobody
+      # watches, from a timestamp fetched off the network. Getting it wrong
+      # costs nothing visible: no failure, no warning, just an index quietly
+      # missing whatever was pushed on a day the scheduler skipped.
+      - name: Diff window
+        run: python tests/diff_window.py
+
       # The page reimplements rank.py in JavaScript. If they drift, the quality
       # suite keeps passing while users see different results.
       - name: Ranking parity

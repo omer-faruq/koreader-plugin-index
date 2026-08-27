@@ -577,13 +577,61 @@ def sanity_check(plugins, patches, previous, previous_patches):
     return True, ""
 
 
+# --------------------------------------------------------------- diff window
+
+def diff_window(previous, since_days, max_days, now=None):
+    """The date to hand GitHub as `pushed:>`, or None to rebuild in full.
+
+    The floor is `since_days` back from today, which is all a diff used to
+    have: wider than the daily cadence, so an ordinary late run still overlaps
+    the one before it. What a fixed floor cannot survive is a run that does
+    not happen at all. GitHub's scheduler is best-effort -- on 27 August 2026
+    a run booked for 03:23 UTC started at 14:22, and the day before that the
+    scheduler dropped runs outright -- and a night that is skipped leaves the
+    repositories pushed inside the gap invisible to every run afterwards.
+    Nothing reports that; the index simply goes quietly stale in places.
+
+    So the window also reaches back to whatever the published index says it
+    was built from. That is a better signal than the run history: a run can go
+    green and still fail to publish, and a build can be red after the index is
+    already live. `generated_at` describes what readers actually have, and it
+    is already in hand -- a diff run downloads that index regardless.
+
+    A day is subtracted from it because `pushed:>DATE` excludes DATE itself
+    and the last build ran partway through its own day. Past `max_days` the
+    diff stops being the cheap option, and a full run is owed anyway: it is
+    the only one that sees deletions and removed topics.
+    """
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    since = (now - datetime.timedelta(days=since_days)).date()
+    note = f"{since_days}-day window"
+
+    stamp = (previous or {}).get("generated_at")
+    if stamp:
+        try:
+            built = datetime.datetime.fromisoformat(stamp.replace("Z", "+00:00")).date()
+        except ValueError:
+            note += f"; generated_at {stamp!r} unreadable"
+        else:
+            reach = built - datetime.timedelta(days=1)
+            if reach < since:
+                since, note = reach, f"reaching back to the {built} build"
+
+    gap = (now.date() - since).days
+    if gap > max_days:
+        return None, f"last index {gap} days back, past the {max_days}-day diff limit"
+    return since.strftime("%Y-%m-%d"), note
+
+
 # ------------------------------------------------------------------------- main
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=["full", "diff"], default="diff")
     parser.add_argument("--since-days", type=int, default=2,
-                        help="diff window; wider than the daily cadence on purpose")
+                        help="diff window floor; wider than the daily cadence on purpose")
+    parser.add_argument("--max-diff-days", type=int, default=14,
+                        help="a gap wider than this is rebuilt in full instead")
     parser.add_argument("--out", default=str(DOCS))
     args = parser.parse_args()
 
@@ -607,10 +655,13 @@ def main():
 
     since = None
     if args.mode == "diff":
-        window = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=args.since_days)
-        since = window.strftime("%Y-%m-%d")
-        print(f"diff mode: repositories pushed since {since}")
-    else:
+        since, why = diff_window(previous, args.since_days, args.max_diff_days)
+        if since is None:
+            print(f"{why}; falling back to a full build")
+            args.mode = "full"
+        else:
+            print(f"diff mode: repositories pushed since {since} ({why})")
+    if args.mode == "full":
         print("full mode: enumerating everything")
 
     print("collecting plugins…")
