@@ -21,20 +21,25 @@ CASES = ROOT / "tests" / "queries.toml"
 TOP_N = 3
 
 
-def breakdown(entry, tokens):
+def breakdown(entry, tokens, raw_words=()):
     """Per-field hit counts, so a loss can be diagnosed rather than guessed at."""
     fields = {
-        "kw": (rank.WEIGHT_KEYWORD, " ".join(entry.get("keywords", []))),
-        "purp": (rank.WEIGHT_PURPOSE, entry.get("purpose", "")),
-        "desc": (rank.WEIGHT_DESCRIPTION, entry.get("description", "")),
-        "cat": (rank.WEIGHT_CATEGORY, " ".join(entry.get("categories", []))),
-        "name": (rank.WEIGHT_NAME, entry.get("repo", "")),
+        "kw": (rank.WEIGHT_KEYWORD, " ".join(entry.get("keywords", [])), False),
+        "purp": (rank.WEIGHT_PURPOSE, entry.get("purpose", ""), False),
+        "desc": (rank.WEIGHT_DESCRIPTION, entry.get("description", ""), False),
+        "cat": (rank.WEIGHT_CATEGORY, " ".join(entry.get("categories", [])), False),
+        "name": (rank.WEIGHT_NAME, " ".join(rank.name_words(rank.name_of(entry))), True),
     }
     parts = []
-    for label, (weight, text) in fields.items():
-        n = rank._hits(tokens, text)
+    for label, (weight, text, substring) in fields.items():
+        n = rank._hits(tokens, text, substring)
         if n:
             parts.append(f"{label}×{n}={weight * n:.1f}")
+    # Named even when it is absent: "the query was this plugin's own name and
+    # it still lost" and "the name never matched" are different diagnoses, and
+    # a line that only appears on a win cannot tell them apart.
+    if rank.title_match(entry, tokens, raw_words):
+        parts.append(f"title=+{rank.TITLE_BONUS:.1f}")
     tier = entry.get("tier", "?")
     parts.append(f"tier{tier}={rank.TIER_BONUS.get(tier, 0):+.1f}")
     parts.append(f"★{entry.get('stars', 0)}")
@@ -48,6 +53,7 @@ def explain_failure(entries, query, expected, top):
     number is always which field the expected entry failed to match on.
     """
     tokens = rank.tokenise(query)
+    raw = rank.query_words(query)
     by_id = {e["id"]: e for e in entries}
     print(f"          tokens: {tokens}")
     for label, entry_id in [("want", expected[0]), ("won ", top[0] if top else None)]:
@@ -55,8 +61,8 @@ def explain_failure(entries, query, expected, top):
         if not entry:
             print(f"          {label} {entry_id}: NOT IN INDEX")
             continue
-        total = rank.score(entry, tokens)
-        print(f"          {label} {entry_id}  = {total:.1f}   {breakdown(entry, tokens)}")
+        total = rank.score(entry, tokens, raw)
+        print(f"          {label} {entry_id}  = {total:.1f}   {breakdown(entry, tokens, raw)}")
         if label == "want":
             print(f"               keywords: {(entry.get('keywords') or [])[:12]}")
             print(f"               purpose:  {(entry.get('purpose') or '')[:110]}")

@@ -31,7 +31,7 @@ const source = html.slice(start, end);
 
 const scorer = new Function(`
   ${source}
-  return { tokenise, score };
+  return { tokenise, queryWords, score };
 `)();
 
 const cases = readFileSync(join(root, "tests", "queries.toml"), "utf8")
@@ -42,8 +42,9 @@ const cases = readFileSync(join(root, "tests", "queries.toml"), "utf8")
 const out = {};
 for (const query of cases) {
   const tokens = scorer.tokenise(query);
+  const raw = scorer.queryWords(query);
   out[query] = index.plugins
-    .map(e => [scorer.score(e, tokens), e])
+    .map(e => [scorer.score(e, tokens, raw), e])
     .filter(p => p[0] > 0)
     .sort((a, b) => b[0] - a[0] || a[1].id.localeCompare(b[1].id))
     .slice(0, 3)

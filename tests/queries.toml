@@ -81,3 +81,30 @@ expect_top3 = ["finlater/weread.koplugin", "miumiupy98-art/weread.koplugin-fixed
 [[case]]
 query = "chinese web novels"
 expect_top3 = ["hesan1232/fanqie.koplugin", "pengcw/legado.koplugin"]
+
+# Someone who already knows the name and types it. Every case below put the
+# plugin that is *called* this outside the top three -- most of them nowhere in
+# the results at all -- because a name like `readingstreak.koplugin` is one
+# indexed word that "streak" cannot reach, and `reading` is a stopword. Which
+# is the worst way to lose a user: they typed the right thing, saw a list
+# without it, and concluded the catalogue does not have it.
+
+[[case]]
+query = "reading streak"
+expect_top3 = ["advokatb/readingstreak.koplugin"]
+
+[[case]]
+query = "reading list"
+expect_top3 = ["maxcaplan/readinglist.koplugin"]
+
+[[case]]
+query = "page turner"
+expect_top3 = ["TomasDiLeo/pageturner.koplugin"]
+
+[[case]]
+query = "quick settings"
+expect_top3 = ["renandeivison/quicksettings"]
+
+[[case]]
+query = "folder memory"
+expect_top3 = ["Craftwork2720/foldermemory.koplugin"]

@@ -922,6 +922,61 @@ const POPULARITY_WEIGHT = 1.5;
 const MIN_PREFIX = 4;
 const MIN_INDEX_PREFIX = 3;
 
+// Names run their words together. A third of the catalogue is called something
+// like `readingstyle.koplugin` -- one indexed word, not two -- so the prefix
+// rule that works for prose cannot see inside them, and the plugin scored zero
+// against its own title. Substring matching is too loose for prose fields; on
+// a name it is the only way in, and the name is the weakest weight, so a
+// coincidence surfaces an entry without ever outranking one that matched on
+// what it does.
+const MIN_NAME_SUBSTRING = 4;
+
+// Awarded once, on top of the fields, when the query is in substance the
+// plugin's own name. Deliberately not a raise of WEIGHT.name: "a query word
+// appears somewhere in the name" stays weak evidence -- that is the manga
+// failure above -- while "the query *is* the name" is close to certain intent,
+// and someone typing a name they already know has to be answered first, or
+// they conclude the catalogue does not have it and leave.
+const TITLE_BONUS = 6;
+// The query has to account for the name, *and* the name has to account for the
+// query. One direction alone is not enough: "customise the SimpleUI
+// homescreen" names SimpleUI in full, but it describes a need rather than
+// looking a name up, and rewarding the name there put five near-identical
+// forks above the extension that actually answers it.
+const TITLE_MIN_COVERAGE = 0.8;
+const TITLE_MIN_FOCUS = 0.5;
+// A two-letter word tiles too many names by accident, and a very short name is
+// covered by almost anything.
+const MIN_TITLE_WORD = 3;
+const MIN_TITLE_SLUG = 5;
+
+// GitHub allows every shape at once: `annotationsync`, `AnnotationSync`,
+// `annotation-sync`, all under a `.koplugin` suffix, and patches under a `2-`
+// load-order prefix. A pair of groups rather than a lookbehind, and the same
+// expression rank.py uses: an older mobile browser cannot parse a lookbehind,
+// and failing to parse one takes the whole page down rather than one search.
+const CAMEL_BOUNDARY = /([a-z0-9])([A-Z])/g;
+const NAME_NOISE = new Set(["koreader", "koplugin", "plugin", "ko", "lua"]);
+
+// A patch is displayed under its filename, not under the repository that
+// happens to hold it, so that is what a search for it has to match. Scoring
+// the repository instead meant a patch could not be found by the only name the
+// page ever showed for it.
+const nameOf = entry => entry.path || entry.repo || "";
+
+function nameWords(name) {
+  return words((name || "").replace(CAMEL_BOUNDARY, "$1 $2"))
+    .filter(w => !NAME_NOISE.has(w) && !/^[0-9]+$/.test(w));
+}
+
+// Every word in the query, stopwords kept. The stopword list exists because
+// this catalogue is entirely about reading: `read`, `reading`, `book` carry no
+// signal in prose. They carry plenty in a name -- half these plugins are
+// called one of them -- so the title test below gets the query before it is
+// filtered, and only the title test does.
+const queryWords = q => words(q);
+
+
 const STOPWORDS = new Set([
   "i","want","to","a","an","the","my","me","for","with","on","in","of","and",
   "or","how","do","can","is","it","that","this","which","koreader","plugin",
@@ -995,26 +1050,62 @@ function wordset(text) {
   return { words: w, stems: new Set([...w].map(stem)) };
 }
 
-function matches(token, pool) {
+function matches(token, pool, substring) {
   if (pool.words.has(token) || pool.stems.has(stem(token))) return true;
   if (token.length < MIN_PREFIX) return false;
   for (const w of pool.words) {
     if (w.startsWith(token) || (w.length >= MIN_INDEX_PREFIX && token.startsWith(w))) return true;
+    if (substring && token.length >= MIN_NAME_SUBSTRING && w.includes(token)) return true;
   }
   return false;
 }
 
+// Is the query, in substance, this plugin's own name?
+//
+// Coverage asks how much of the name the query accounts for. It is measured
+// over the name rather than over the query, so padding cannot dilute it --
+// "the reading style plugin please" covers `readingstyle` exactly as fully as
+// "reading style" does -- and over characters rather than words, because the
+// name is usually one run-together word, which is the whole problem this is
+// here to solve. The direction matters for the manga failure: `manga` covers
+// five of the fourteen characters of `mangapanelzoom`, which is not a title
+// match and does not become one.
+//
+// Focus asks the reverse: how much of the query the name accounts for. A query
+// that names a plugin and then asks for something else is a description of a
+// need, and the fields already know how to rank those.
+function titleMatch(entry, tokens, rawWords) {
+  const slug = nameWords(nameOf(entry)).join("");
+  if (slug.length < MIN_TITLE_SLUG) return false;
+
+  const covered = new Array(slug.length).fill(false);
+  for (const w of rawWords) {
+    if (w.length < MIN_TITLE_WORD) continue;
+    for (let at = slug.indexOf(w); at !== -1; at = slug.indexOf(w, at + 1)) {
+      for (let i = at; i < at + w.length; i++) covered[i] = true;
+    }
+  }
+  if (covered.filter(Boolean).length / slug.length < TITLE_MIN_COVERAGE) return false;
+
+  // No tokens at all means the query was nothing but stopwords, which coverage
+  // just found spelled out the name: `book reader` against `bookreader` is all
+  // name and nothing else.
+  if (!tokens.length) return true;
+  return tokens.filter(t => slug.includes(t)).length / tokens.length >= TITLE_MIN_FOCUS;
+}
+
+// [weight, text, substring-allowed] per field.
 function fieldsOf(entry) {
   const fields = [
-    [WEIGHT.keyword, (entry.keywords || []).join(" ")],
-    [WEIGHT.purpose, entry.purpose],
-    [WEIGHT.description, entry.description],
-    [WEIGHT.category, (entry.categories || []).join(" ")],
-    [WEIGHT.name, entry.repo]
+    [WEIGHT.keyword, (entry.keywords || []).join(" "), false],
+    [WEIGHT.purpose, entry.purpose, false],
+    [WEIGHT.description, entry.description, false],
+    [WEIGHT.category, (entry.categories || []).join(" "), false],
+    [WEIGHT.name, nameWords(nameOf(entry)).join(" "), true]
   ];
   // Attached onto the entry when deep search loads, so this mirrors rank.py
   // exactly and stays free of any page state.
-  if (entry.readme) fields.push([WEIGHT.readme, entry.readme]);
+  if (entry.readme) fields.push([WEIGHT.readme, entry.readme, false]);
   return fields;
 }
 
@@ -1023,31 +1114,41 @@ function fieldsOf(entry) {
 // overlap by construction: keywords are extracted from the description and the
 // purpose restates it. On real data that let a panel-zoom plugin outscore the
 // actual manga reader purely by repeating two words across three fields.
-function score(entry, tokens) {
-  if (!tokens.length) return 0;
-  const pools = fieldsOf(entry).map(([w, text]) => [w, wordset(text)]);
+function score(entry, tokens, rawWords = []) {
+  const title = titleMatch(entry, tokens, rawWords) ? TITLE_BONUS : 0;
+  if (!tokens.length && !title) return 0;
+  const pools = fieldsOf(entry).map(([w, text, sub]) => [w, wordset(text), sub]);
   let s = 0;
   for (const t of tokens) {
     let best = 0;
-    for (const [w, pool] of pools) {
-      if (w > best && matches(t, pool)) best = w;
+    for (const [w, pool, sub] of pools) {
+      if (w > best && matches(t, pool, sub)) best = w;
     }
     s += best;
   }
-  if (s <= 0) return 0;
+  // A name made entirely of stopwords -- `bookreader`, `readinglist` -- leaves
+  // nothing for the fields to score, and the title match is then the only
+  // evidence there is. It is enough on its own; nothing else is.
+  if (s <= 0 && !title) return 0;
+  s += title;
   s += TIER_BONUS[entry.tier] ?? 0;
   s += POPULARITY_WEIGHT * Math.log10(Math.max(entry.stars || 0, 0) + 1);
   return s;
 }
 
-function explain(entry, tokens) {
+function explain(entry, tokens, rawWords = []) {
   const set = new Set(tokens);
   let matched = (entry.keywords || []).filter(k => set.has(k));
   if (!matched.length) {
     const pool = new Set(words(entry.purpose));
     matched = tokens.filter(t => pool.has(t));
   }
-  return matched.slice(0, 4);
+  matched = matched.slice(0, 4);
+  // A title match is often the only reason an entry is here, and the card has
+  // to say so. A plugin found under its own name can carry a description in a
+  // language the reader does not have; a top result listing no reason at all
+  // reads as noise rather than as the answer to what was typed.
+  return titleMatch(entry, tokens, rawWords) ? ["its name", ...matched].slice(0, 4) : matched;
 }
 
 /* ------------------------------------------------------------------- state */
@@ -1346,9 +1447,10 @@ function aiPool() {
 
 function shortlistFor(query) {
   const tokens = tokenise(query);
+  const raw = queryWords(query);
   const pool = aiPool();
   const matched = dedupeVariants(
-    pool.map(e => [score(e, tokens), e])
+    pool.map(e => [score(e, tokens, raw), e])
       .filter(p => p[0] > 0)
       .sort((a, b) => b[0] - a[0])
       .map(p => p[1])
@@ -2118,6 +2220,7 @@ function renderAnswer(session) {
   }
 
   const tokens = tokenise(session.retrievalQuery);
+  const raw = queryWords(session.retrievalQuery);
   // The extra searches are named, not hidden. They cost the reader's own key,
   // and seeing which words found an answer is half of what makes the answer
   // trustworthy.
@@ -2143,7 +2246,7 @@ function renderAnswer(session) {
       return `<div class="ai-result"><span class="ai-rank">${
         i === 0 ? "Best match" : `#${i + 1}`}${
         p.score != null ? ` · fit ${Math.round(p.score)}` : ""}</span>${
-        card(entry, tokens, `<p class="ai-why">${esc(p.why || "")}</p>`)}</div>`;
+        card(entry, tokens, `<p class="ai-why">${esc(p.why || "")}</p>`, raw)}</div>`;
     }).join("") +
     againLine(session) +
     (weak ? otherCatalogueNote() : "");
@@ -2261,6 +2364,7 @@ function renderShared(payload) {
                    model: payload.m || "", picks: found.map(p => ({ id: p.id, fit: p.score, why: p.why })) };
 
   const tokens = tokenise(payload.q || "");
+  const raw = queryWords(payload.q || "");
   $("aiEscape").hidden = true;
   $("aiOut").innerHTML =
     `<div class="share-banner"><b>A shared answer</b>
@@ -2280,7 +2384,7 @@ function renderShared(payload) {
       return `<div class="ai-result"><span class="ai-rank">${
         i === 0 ? "Best match" : `#${i + 1}`}${
         p.score != null ? ` · fit ${Math.round(p.score)}` : ""}</span>${
-        card(entry, tokens, `<p class="ai-why">${esc(p.why)}</p>`)}</div>`;
+        card(entry, tokens, `<p class="ai-why">${esc(p.why)}</p>`, raw)}</div>`;
     }).join("") +
     (missing.length
       ? `<div class="note info"><b>${missing.length} no longer in the index</b>${
@@ -2557,8 +2661,8 @@ function tierLabel(entry) {
   return "unverified";
 }
 
-function card(entry, tokens, note) {
-  const why = explain(entry, tokens);
+function card(entry, tokens, note, rawWords = []) {
+  const why = explain(entry, tokens, rawWords);
   const patch = isPatch(entry);
   const stars = patch ? entry.repo_stars : entry.stars;
   const title = patch ? entry.path : entry.repo;
@@ -2649,6 +2753,12 @@ function distinctionNotes(shown) {
 function render() {
   const idx = state.index;
   const tokens = tokenise(state.query);
+  // A query of nothing but stopwords still has to search. `book reader` filters
+  // down to no tokens at all, and treating that as an empty box showed the
+  // whole catalogue to someone who had typed a name -- the same disappearance
+  // the title bonus exists to fix, one step earlier.
+  const raw = queryWords(state.query);
+  const searching = raw.length > 0;
   // Never merged. A patch monkey-patches KOReader core and a plugin does not,
   // so the two are recommended under different rules and shown apart.
   let list = (state.tab === "patches" ? idx.patches : idx.plugins).slice();
@@ -2657,8 +2767,8 @@ function render() {
   if (!state.showC) list = list.filter(e => e.tier !== "C");
 
   let heading = "";
-  if (tokens.length) {
-    list = list.map(e => [score(e, tokens), e]).filter(p => p[0] > 0)
+  if (searching) {
+    list = list.map(e => [score(e, tokens, raw), e]).filter(p => p[0] > 0)
                .sort((a, b) => b[0] - a[0] || a[1].id.localeCompare(b[1].id))
                .map(p => p[1]);
     heading = `${list.length} match${list.length === 1 ? "" : "es"}`;
@@ -2680,7 +2790,7 @@ function render() {
     // pretending to be the oldest things in the catalogue.
     if (state.sort === "new") list = list.filter(e => createdOf(e));
     list.sort((a, b) => key(b).localeCompare(key(a)) || a.id.localeCompare(b.id));
-    if (!tokens.length) {
+    if (!searching) {
       heading = state.sort === "new" ? "Newest first" : "Recently updated";
     }
   }
@@ -2699,7 +2809,7 @@ function render() {
     else $("listShareModal").hidden = true;
   }
 
-  $("count").textContent = tokens.length ? heading : "";
+  $("count").textContent = searching ? heading : "";
 
   // Stated once, at the top of the tab, rather than repeated on every card:
   // for a plugin, going stale costs a feature; for a patch it can cost a boot.
@@ -2759,11 +2869,11 @@ function render() {
   // Only while someone is actually choosing between the two. Without a query
   // the listing leads with the curated set, so every pair is on screen at once
   // and every note fires before the reader has asked anything.
-  const notes = tokens.length ? distinctionNotes(list) : new Map();
+  const notes = searching ? distinctionNotes(list) : new Map();
 
   $("results").innerHTML =
-    (tokens.length ? "" : `<div class="section-title">${esc(heading)}</div>`) +
-    list.map(e => card(e, tokens, notes.get(e.id))).join("");
+    (searching ? "" : `<div class="section-title">${esc(heading)}</div>`) +
+    list.map(e => card(e, tokens, notes.get(e.id), raw)).join("");
 
   bindReadme($("results"), list);
   syncUrl();
