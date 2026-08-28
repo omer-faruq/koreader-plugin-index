@@ -103,6 +103,48 @@ class RateLimited(Exception):
     pass
 
 
+# Two different failures arriving through the same door, and they want opposite
+# things. A 403 or 429 is the rate limiter: waiting is the only thing that
+# helps, a minute is the right order, and the response usually says exactly how
+# long. A 502 or 503 is GitHub having a moment; it clears in seconds, and
+# spending a minute on it is pure loss.
+#
+# They shared one ladder until a full build showed what that costs. 184
+# requests go out, a handful 502 on any given night, and the run that measured
+# this took eleven minutes where the work is six -- the difference being four
+# or five transient errors, each answered with a minute of sleep.
+#
+# The transient ladder is longer as well as shorter: cheap retries can afford
+# to be patient, and giving up is the expensive outcome. Nothing catches
+# RateLimited, so exhausting a ladder fails the whole build.
+LIMIT_BACKOFF = (60, 120, 180, 240)
+TRANSIENT_BACKOFF = (2, 8, 20, 45, 60, 60)
+NETWORK_BACKOFF = (10, 20, 30, 40)
+
+# A wait the ladder cannot exceed, and a total no request may pass however its
+# failures are mixed. Without the second, alternating error classes could keep
+# a single request alive indefinitely, each class resetting the other.
+MAX_WAIT = 300
+MAX_TOTAL_WAIT = 20 * 60
+
+
+def _rate_limit_wait(headers):
+    """How long the rate limiter says to wait, if it says.
+
+    Guessing is what the ladder is for; when the answer is in the response,
+    using it is both faster and kinder than a fixed minute. `Retry-After` is
+    the secondary-limit answer, `x-ratelimit-reset` the primary one -- and the
+    latter only means anything once the remaining count is actually zero.
+    """
+    raw = (headers.get("Retry-After") or "").strip()
+    if raw.isdigit():
+        return int(raw)
+    reset = (headers.get("X-RateLimit-Reset") or "").strip()
+    if reset.isdigit() and (headers.get("X-RateLimit-Remaining") or "").strip() == "0":
+        return max(int(reset) - int(time.time()), 0)
+    return None
+
+
 class Client:
     def __init__(self, token=None, verbose=True):
         self.token = token or os.environ.get("GITHUB_TOKEN") or ""
@@ -112,7 +154,7 @@ class Client:
 
     # ---------------------------------------------------------------- transport
 
-    def _post(self, url, payload, retries=4):
+    def _post(self, url, payload):
         body = json.dumps(payload).encode("utf-8")
         headers = {
             "Content-Type": "application/json",
@@ -122,26 +164,45 @@ class Client:
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
 
-        for attempt in range(retries):
+        # Counted per class, so a transient error does not spend the patience
+        # the rate limiter is owed, or the other way round.
+        tries = {"limit": 0, "transient": 0, "network": 0}
+        total = 0
+        while True:
             req = urllib.request.Request(url, data=body, headers=headers)
             try:
                 with urllib.request.urlopen(req, timeout=60) as resp:
                     self.requests += 1
                     return json.loads(resp.read().decode("utf-8"))
             except urllib.error.HTTPError as exc:
-                # 403/429 is the rate limiter; 5xx is GitHub having a moment.
-                # Both are worth waiting out, and neither should lose the run.
-                if exc.code in (403, 429, 502, 503):
-                    wait = min(60 * (attempt + 1), 300)
-                    self._log(f"  HTTP {exc.code}, waiting {wait}s")
-                    time.sleep(wait)
-                    continue
-                raise
+                if exc.code in (403, 429):
+                    kind, ladder = "limit", LIMIT_BACKOFF
+                    stated = _rate_limit_wait(exc.headers or {})
+                elif exc.code in (502, 503):
+                    kind, ladder, stated = "transient", TRANSIENT_BACKOFF, None
+                else:
+                    raise
+                reason = f"HTTP {exc.code}"
             except urllib.error.URLError as exc:
-                wait = 10 * (attempt + 1)
-                self._log(f"  network error ({exc.reason}), waiting {wait}s")
-                time.sleep(wait)
-        raise RateLimited(f"gave up after {retries} attempts")
+                kind, ladder, stated = "network", NETWORK_BACKOFF, None
+                reason = f"network error ({exc.reason})"
+
+            attempt = tries[kind]
+            if attempt >= len(ladder):
+                raise RateLimited(
+                    f"{reason}: gave up after {attempt} attempts")
+            tries[kind] = attempt + 1
+            # The stated wait can exceed the cap -- a primary limit resets on
+            # the hour. Sleeping the cap and asking again is harmless: the
+            # answer is another 403 and another wait, and the ladder still
+            # bounds how long this can go on.
+            wait = min(stated if stated is not None else ladder[attempt], MAX_WAIT)
+            if total + wait > MAX_TOTAL_WAIT:
+                raise RateLimited(
+                    f"{reason}: {total + wait}s of waiting on one request")
+            total += wait
+            self._log(f"  {reason}, waiting {wait}s")
+            time.sleep(wait)
 
     def graphql(self, query, variables):
         data = self._post(GRAPHQL_URL, {"query": query, "variables": variables})

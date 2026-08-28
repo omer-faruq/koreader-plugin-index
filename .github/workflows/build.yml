@@ -72,6 +72,13 @@ jobs:
       - name: Coverage gate
         run: python tests/coverage_gate.py
 
+      # Retry behaviour runs at 03:23 against someone else's outage, and both
+      # its failure modes are silent: waiting too little on a rate limit loses
+      # the run, waiting too much on a 502 turned a six-minute build into an
+      # eleven-minute one before the ladders were split.
+      - name: Backoff
+        run: python tests/backoff.py
+
       # The marker decides tier, and tier decides whether an entry is on the
       # page at all or behind the "dormant, forks and stubs" checkbox. It asked
       # the wrong question for most of the catalogue's life -- _meta.lua, which
