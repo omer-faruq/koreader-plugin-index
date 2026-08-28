@@ -21,17 +21,20 @@ USER_AGENT = "koreader-plugin-index"
 SEARCH_CAP = 900
 
 # One query returns everything the plugin pipeline needs about a repository.
-# `root` is the repository root tree, expanded one level: it tells us whether
-# the files KOReader loads sit at the top level or one directory down, which is
-# the strongest available signal that a repository is a real KOReader plugin
-# and not a fork or a stub. Half the repositories that carry a plugin keep it
-# under `src/` or `plugin/`, so the unexpanded root missed them.
+# `root` is the repository root tree: it answers, for most repositories, the
+# strongest available signal that this is a real KOReader plugin rather than a
+# fork or a stub.
 #
-# `entries` is a plain list rather than a connection, so it takes no `first:`
-# and costs nothing against the node limit. It does enlarge the response -- and
-# measured on a page of twenty repositories, by 6.7%: 743 KB against 696 KB, of
-# which the whole two-level tree is 67 KB. The rest is README bodies this query
-# already carried, beside which a second level of filenames is noise.
+# Flat, deliberately. Expanding it one level here answered the same question
+# for every repository in one pass, and it looked nearly free -- 6.7% more
+# bytes. Measured in time rather than bytes it was 2.2x slower per request:
+# 9.60s against 4.11s on `topic:koreader-plugin`, 7.71s against 3.69s on
+# `in:name ".koplugin"`, medians of four alternating runs. GitHub walks every
+# top-level directory server-side, and the cost is there, not on the wire. Over
+# the ~54 pages a full build reads that was four minutes.
+#
+# So the second level is asked for separately, by TREES_QUERY below, and only
+# for the repositories whose root shows nothing.
 SEARCH_QUERY = """
 query($q: String!, $after: String) {
   rateLimit { remaining resetAt }
@@ -58,12 +61,7 @@ query($q: String!, $after: String) {
         readmeLower: object(expression: "HEAD:readme.md")  { ... on Blob { text byteSize } }
         readmePlain: object(expression: "HEAD:README")     { ... on Blob { text byteSize } }
         root: object(expression: "HEAD:") {
-          ... on Tree {
-            entries {
-              name type
-              object { ... on Tree { entries { name type } } }
-            }
-          }
+          ... on Tree { entries { name type } }
         }
       }
     }
@@ -83,6 +81,32 @@ query($q: String!) {
 # commit that touched *that path* -- for a patch, staleness is a safety signal
 # and a repo-level date hides it, since one active repo can hold a patch that
 # has been dead for two years.
+# The second level, for the few repositories that need it. Same aliasing trick
+# as FILES_QUERY: one request carries twenty repositories instead of twenty
+# requests carrying one. Expensive per repository and cheap in bulk, which is
+# the opposite of what folding it into the search did.
+TREES_QUERY_HEAD = """
+query {
+  rateLimit { remaining resetAt }
+"""
+
+TREES_QUERY_REPO = """
+  r{i}: repository(owner: {owner}, name: {name}) {{
+    root: object(expression: "HEAD:") {{
+      ... on Tree {{
+        entries {{
+          name type
+          object {{ ... on Tree {{ entries {{ name type }} }} }}
+        }}
+      }}
+    }}
+  }}
+"""
+
+TREES_QUERY_TAIL = """
+}
+"""
+
 FILES_QUERY_HEAD = """
 query($owner: String!, $name: String!) {
   rateLimit { remaining resetAt }
@@ -297,6 +321,36 @@ class Client:
             if found:
                 self._log(f"    {label}: {found}")
                 yield from self._page_all(sub)
+
+    # ------------------------------------------------------------------- trees
+
+    def fetch_trees(self, ids, batch=20):
+        """Root entries with their children, for the repositories named.
+
+        Keyed by `owner/name`, shaped exactly like the `root` field of a search
+        node so a caller can drop it in place. A repository that has gone,
+        turned private or holds no commits simply does not appear: this decides
+        a tier, never a build, and one stranger's deleted repository must not
+        cost the run.
+        """
+        result = {}
+        for start in range(0, len(ids), batch):
+            chunk = ids[start:start + batch]
+            parts = []
+            for i, full in enumerate(chunk):
+                owner, _, name = full.partition("/")
+                parts.append(TREES_QUERY_REPO.format(
+                    i=i, owner=_gql_string(owner), name=_gql_string(name)))
+            data = self.graphql(
+                TREES_QUERY_HEAD + "\n".join(parts) + TREES_QUERY_TAIL, {})
+            limit = (data or {}).get("rateLimit") or {}
+            self.remaining = limit.get("remaining", self.remaining)
+
+            for i, full in enumerate(chunk):
+                repo = (data or {}).get(f"r{i}")
+                if repo and repo.get("root"):
+                    result[full] = repo["root"]
+        return result
 
     # ------------------------------------------------------------------- files
 

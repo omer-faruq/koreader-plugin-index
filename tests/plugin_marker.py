@@ -136,6 +136,71 @@ def a_file_named_like_a_directory_is_not_one():
         "a *.koplugin blob is not a plugin directory")
 
 
+def only_the_roots_that_showed_nothing_are_asked_about():
+    """The whole reason the second level is a separate query. Asking it for
+    everyone in the search cost four minutes a build to learn something about
+    eighty repositories."""
+    nodes = {
+        "a/rooted": tree("main.lua"),
+        "b/deep": tree("README.md", "src/x"),
+        "c/empty": tree("README.md"),
+    }
+    asked = []
+
+    class Client:
+        def fetch_trees(self, ids, batch=20):
+            asked.extend(ids)
+            return {"b/deep": tree("README.md", "src/main.lua")["root"]}
+
+    build.deepen_roots(Client(), nodes)
+    expect(sorted(asked) == ["b/deep", "c/empty"],
+           f"only marker-less roots should be asked about, got {asked}")
+    expect(build.has_plugin_marker(nodes["b/deep"]),
+           "a second level that finds the plugin must be kept")
+    expect(build.has_plugin_marker(nodes["a/rooted"]),
+           "a node that already answered must not be disturbed")
+
+
+def a_repository_that_does_not_come_back_keeps_its_root():
+    """Gone, private, or empty. This decides a tier, never a build -- one
+    stranger's deleted repository must not cost the run."""
+    nodes = {"a/gone": tree("README.md")}
+
+    class Client:
+        def fetch_trees(self, ids, batch=20):
+            return {}
+
+    build.deepen_roots(Client(), nodes)
+    expect(not build.has_plugin_marker(nodes["a/gone"]),
+           "a missing answer stays the answer the root gave")
+
+
+def the_second_level_is_asked_in_bulk():
+    """Twenty repositories a request rather than twenty requests. Expensive per
+    repository and cheap in bulk, which is the opposite of the search."""
+    import github  # noqa: PLC0415 -- only this case needs it
+
+    sent = []
+
+    def graphql(query, variables):
+        sent.append(query)
+        return {"rateLimit": {"remaining": 1},
+                "r0": {"root": {"entries": [{"name": "main.lua", "type": "blob"}]}},
+                "r1": None}
+
+    client = github.Client(token="t", verbose=False)
+    client.graphql = graphql
+    out = client.fetch_trees([f"o{i}/n{i}" for i in range(25)])
+
+    expect(len(sent) == 2, f"25 repositories should take 2 requests, took {len(sent)}")
+    expect(sent[0].count("repository(owner:") == 20,
+           "the first request should carry a full batch")
+    expect(sent[1].count("repository(owner:") == 5,
+           "the second request should carry the remainder")
+    expect(set(out) == {"o0/n0", "o20/n20"},
+           f"results should be keyed by owner/name, got {sorted(out)}")
+
+
 CASES = [
     ("a plugin at the root is found", a_plugin_at_the_root_is_found),
     ("a plugin without _meta.lua is still a plugin", a_plugin_without_meta_is_still_a_plugin),
@@ -146,6 +211,9 @@ CASES = [
     ("the search stops at one level", the_search_stops_at_one_level),
     ("an unexpanded tree falls back to the root", an_unexpanded_tree_falls_back_to_the_root),
     ("a file named like a directory is not one", a_file_named_like_a_directory_is_not_one),
+    ("only the roots that showed nothing are asked about", only_the_roots_that_showed_nothing_are_asked_about),
+    ("a repository that does not come back keeps its root", a_repository_that_does_not_come_back_keeps_its_root),
+    ("the second level is asked in bulk", the_second_level_is_asked_in_bulk),
 ]
 
 

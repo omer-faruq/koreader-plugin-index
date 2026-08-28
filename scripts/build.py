@@ -447,7 +447,36 @@ def collect_plugins(client, since=None):
             query += f" pushed:>{since}"
         for node in client.search(query):
             found[node["nameWithOwner"]] = node
+    deepen_roots(client, found)
     return found
+
+
+def deepen_roots(client, nodes):
+    """Fetch the second level of the tree, for the few that need it.
+
+    Most repositories answer the marker question at their root, and the search
+    already has that. The rest keep the plugin one directory down, and folding
+    that second level into the search query answered it for everyone at once --
+    which sounds efficient and is not: GitHub walks every top-level directory
+    server-side, and the search went from 4.1s a page to 9.6s. Over the fifty-odd
+    pages a full build reads, four minutes to learn something about eighty
+    repositories.
+
+    Asked separately and in bulk it costs four requests. `has_plugin_marker`
+    reads whichever shape it is handed -- an unexpanded directory means
+    "nothing found here", never an error -- so nodes that keep their flat root
+    are unaffected, and a repository that fails to come back keeps the answer
+    the root already gave.
+    """
+    shallow = [key for key, node in nodes.items() if not has_plugin_marker(node)]
+    if not shallow:
+        return
+    trees = client.fetch_trees(shallow)
+    for key, root in trees.items():
+        nodes[key]["root"] = root
+    deeper = sum(1 for key in trees if has_plugin_marker(nodes[key]))
+    print(f"  {len(shallow)} roots held no plugin; a second level found "
+          f"{deeper} more")
 
 
 # ----------------------------------------------------------------------- output
