@@ -21,9 +21,17 @@ USER_AGENT = "koreader-plugin-index"
 SEARCH_CAP = 900
 
 # One query returns everything the plugin pipeline needs about a repository.
-# `root` is the repository root tree: it tells us whether _meta.lua sits at the
-# top level or inside a *.koplugin directory, which is the strongest available
-# signal that a repository is a real KOReader plugin and not a fork or a stub.
+# `root` is the repository root tree, expanded one level: it tells us whether
+# the files KOReader loads sit at the top level or one directory down, which is
+# the strongest available signal that a repository is a real KOReader plugin
+# and not a fork or a stub. Half the repositories that carry a plugin keep it
+# under `src/` or `plugin/`, so the unexpanded root missed them.
+#
+# `entries` is a plain list rather than a connection, so it takes no `first:`
+# and costs nothing against the node limit. It does enlarge the response -- and
+# measured on a page of twenty repositories, by 6.7%: 743 KB against 696 KB, of
+# which the whole two-level tree is 67 KB. The rest is README bodies this query
+# already carried, beside which a second level of filenames is noise.
 SEARCH_QUERY = """
 query($q: String!, $after: String) {
   rateLimit { remaining resetAt }
@@ -50,7 +58,12 @@ query($q: String!, $after: String) {
         readmeLower: object(expression: "HEAD:readme.md")  { ... on Blob { text byteSize } }
         readmePlain: object(expression: "HEAD:README")     { ... on Blob { text byteSize } }
         root: object(expression: "HEAD:") {
-          ... on Tree { entries { name type } }
+          ... on Tree {
+            entries {
+              name type
+              object { ... on Tree { entries { name type } } }
+            }
+          }
         }
       }
     }

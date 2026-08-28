@@ -716,6 +716,14 @@ def tier_of(entry, curated_tier=None):
     reasons = []
     unloved_fork = entry.get("is_fork") and entry.get("stars", 0) < FORK_MIN_STARS
 
+    # Renamed from `has_meta` when the marker stopped being `_meta.lua`, which
+    # KOReader treats as optional metadata rather than as the plugin. A diff
+    # build re-runs this over entries it did not refetch, so the old key has to
+    # keep answering until one full build has rewritten every entry -- without
+    # the fallback, the first nightly run after the rename demotes the whole
+    # carried-over catalogue to C. Safe to drop after a full rebuild.
+    marker = entry.get("has_plugin_files", entry.get("has_meta"))
+
     dormant = entry.get("activity") != "active"
     age = _age_days(entry.get("pushed_at"))
     settled = (
@@ -723,14 +731,14 @@ def tier_of(entry, curated_tier=None):
         and not entry.get("archived")
         and entry.get("stars", 0) >= ADOPTED_STARS
         and entry.get("readme_bytes", 0) >= STUB_README_BYTES
-        and entry.get("has_meta")
+        and marker
         and (age is None or age <= STALE_DAYS)
     )
 
-    if entry.get("has_meta"):
-        reasons.append("has_meta")
+    if marker:
+        reasons.append("has_plugin_files")
     else:
-        reasons.append("no_meta")
+        reasons.append("no_plugin_files")
     if unloved_fork:
         reasons.append("fork")
     if entry.get("archived"):
@@ -745,7 +753,7 @@ def tier_of(entry, curated_tier=None):
         return curated_tier, ["curated"] + reasons
 
     demoted = (
-        not entry.get("has_meta")
+        not marker
         or unloved_fork
         or entry.get("archived")
         or (dormant and not settled)

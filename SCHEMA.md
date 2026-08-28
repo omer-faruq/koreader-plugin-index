@@ -82,7 +82,7 @@ The unit is a **repository**.
   "topics": ["koreader-plugin", "eink"],
 
   "tier": "A",
-  "tier_reasons": ["curated", "has_meta", "active", "documented"],
+  "tier_reasons": ["curated", "has_plugin_files", "active", "documented"],
   "activity": "active",
 
   "stars": 143,
@@ -94,7 +94,7 @@ The unit is a **repository**.
   "license": "MIT",
   "default_branch": "main",
 
-  "has_meta": true,
+  "has_plugin_files": true,
   "readme_bytes": 8213,
   "detail": "detail/omer-faruq__webbrowser.koplugin.json"
 }
@@ -107,7 +107,7 @@ The unit is a **repository**.
 | `description` | GitHub's own one-liner, verbatim. |
 | `purpose` | First meaningful README paragraph, trimmed. Empty string when the README gives nothing usable — never invented. Read from the English view of the README rather than the file itself: a `README_en.md` beside it, or the English sections of a bilingual document. Where that leaves a Chinese sentence and GitHub's own description is in English, the description is used instead — every consumer reads `purpose or description` and stops at the first, so the better line would otherwise never be seen. |
 | `keywords` | Match surface for search. Union of topics, description words, and README headings, after stop-word removal. For a plugin documented in another script, the `[glossary]` table in `curation.toml` adds English labels for the concepts its opening prose and headings name — labels, never prose, and never a `purpose`. |
-| `has_meta` | `_meta.lua` present in the repo root. The single strongest "this is a real KOReader plugin" signal. |
+| `has_plugin_files` | `main.lua`, `_meta.lua` or a `*.koplugin` directory, at the repo root or one level below it. The single strongest "this is a real KOReader plugin" signal. KOReader loads `main.lua`; `_meta.lua` is optional metadata, so requiring it — as this field did while it was named `has_meta` — demoted real plugins. |
 | `detail` | Relative path, or `null` when there is nothing beyond what is inlined here. The detail document carries `readme_excerpt`, and `readme_source` naming the file it came from when that was not `README.md` — a repository documenting itself in another script gets its own published translation shown, since this page is read in English. |
 
 ## Patch entry
@@ -168,7 +168,7 @@ Every tier signal is deterministic and free. No model is involved.
 | Tier | Meaning | Shown by default |
 | --- | --- | --- |
 | `A` | Listed in `curation.yaml` — human-reviewed | yes |
-| `B` | `has_meta`, not a fork, not archived, active, README has substance | yes |
+| `B` | `has_plugin_files`, not a fork, not archived, active, README has substance | yes |
 | `C` | Everything else: dormant, archived, a stub, or a fork nobody starred | on request, badged |
 
 Being a fork is **not** on its own a demotion. In this ecosystem plugins
@@ -181,8 +181,12 @@ unless the query says `fork:true`, so discovery must ask for them explicitly.
 `tier_reasons` is an array of the signals that produced the tier, so the page
 can render *why* something is demoted rather than silently hiding it:
 
-`curated`, `has_meta`, `no_meta`, `active`, `dormant`, `archived`, `fork`,
-`documented`, `stub`
+`curated`, `has_plugin_files`, `no_plugin_files`, `active`, `dormant`,
+`archived`, `fork`, `documented`, `stub`
+
+Entries carried over from before the rename still say `has_meta` / `no_meta`;
+both spellings mean the same thing and the page renders either. One full
+rebuild clears them.
 
 `created_at` is the repository's, not the plugin's: a plugin that began life
 inside another repository dates from the move. It is absent on entries a diff

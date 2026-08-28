@@ -158,21 +158,55 @@ def attach_english_readmes(client, nodes):
             print(f"    {node['nameWithOwner']}: {name}")
 
 
-def has_plugin_marker(node):
-    """_meta.lua at the root, or a *.koplugin directory holding one.
+# What KOReader itself loads. `pluginloader.lua` discovers directories whose
+# name ends in `.koplugin`, then runs `main.lua` inside one; a plugin missing
+# that file is logged as an error and skipped. `_meta.lua` is read separately,
+# under its own pcall, and only merged if it parses -- a plugin without one
+# loads and runs exactly the same. It matters in one place only: a *disabled*
+# plugin is read from `_meta.lua` instead, so without it the plugin-management
+# menu has no name or description to show. Cosmetic, not functional.
+#
+# This file used to require `_meta.lua`, which is why a third of the demoted
+# entries were real plugins. Verified on a device: they install and run.
+LOADABLE = ("main.lua", "_meta.lua")
 
-    Repository layout is not consistent: some repositories are the plugin
-    folder, others contain it. Both are real, and missing the second shape
-    would demote a large number of legitimate plugins.
+
+def _is_marker(name, kind):
+    return name in LOADABLE or (kind == "tree" and name.endswith(".koplugin"))
+
+
+def has_plugin_marker(node):
+    """Does this repository hold something KOReader would load?
+
+    Two shapes, and repository layout is not consistent about which: some
+    repositories *are* the plugin folder, and some contain it, one level down
+    under `src/`, `plugin/`, `plugins/`, `apps/`, `dist/` or a name nobody has
+    used yet. Looking only at the root missed the second shape entirely and
+    demoted 34 of the 75 entries it was applied to -- among them plugins with
+    hundreds of stars, hidden behind a checkbox reading "dormant, forks and
+    stubs".
+
+    One level is as deep as this goes. A `main.lua` further down is more likely
+    to belong to something else in the repository than to be the plugin, and
+    the shapes actually in use are all reachable at depth one.
+
+    Purely additive: everything the root rule accepted, this accepts. No entry
+    can be demoted by looking deeper, only promoted.
     """
-    root = node.get("root") or {}
-    entries = root.get("entries") or []
+    entries = (node.get("root") or {}).get("entries") or []
     for item in entries:
-        name = item.get("name", "")
-        if name == "_meta.lua":
+        name, kind = item.get("name", ""), item.get("type")
+        if _is_marker(name, kind):
             return True
-        if item.get("type") == "tree" and name.endswith(".koplugin"):
-            return True
+        if kind != "tree":
+            continue
+        # Absent when the tree was not expanded -- an older cached response, or
+        # a directory GitHub declined to walk. Treated as "nothing found here"
+        # rather than as an error: the root rule above still stands on its own.
+        below = (item.get("object") or {}).get("entries") or []
+        for child in below:
+            if _is_marker(child.get("name", ""), child.get("type")):
+                return True
     return False
 
 
@@ -274,7 +308,7 @@ def build_plugin(node, curation):
         "created_at": node.get("createdAt"),
         "license": (node.get("licenseInfo") or {}).get("spdxId"),
         "default_branch": (node.get("defaultBranchRef") or {}).get("name") or "main",
-        "has_meta": has_plugin_marker(node),
+        "has_plugin_files": has_plugin_marker(node),
         "readme_bytes": readme_bytes,
         "detail": None,
     }

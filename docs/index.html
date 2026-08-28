@@ -2656,7 +2656,9 @@ function tierLabel(entry) {
   if (r.includes("archived")) return "archived";
   if (r.includes("fork")) return "fork";
   if (r.includes("dormant")) return "no updates in a year";
-  if (r.includes("no_meta")) return "no _meta.lua";
+  // Both spellings: an index built before the marker was renamed still says
+  // `no_meta`, and the page is served against whatever index.json is published.
+  if (r.includes("no_plugin_files") || r.includes("no_meta")) return "no plugin files";
   if (r.includes("stub")) return "barely documented";
   return "unverified";
 }
