@@ -192,6 +192,12 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
 }
 .tab:hover { color: var(--text); }
 .tab[aria-pressed="true"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+/* The same strip inside AI Mode, where it answers the question a dialog with
+   no tabs left open: which catalogue is this about. It brings its own rule,
+   so the heading above drops the one it would otherwise draw -- two lines a
+   few pixels apart read as a mistake rather than as a separator. */
+#aiView .modal-head { border-bottom: 0; padding-bottom: 0; margin-bottom: 0; }
+#aiTabs { margin: 12px 0 16px; }
 
 .searchbar { position: relative; margin: 16px 0 14px; }
 #q {
@@ -733,6 +739,15 @@ footer a { color: var(--accent); }
     <div class="modal-head">
       <h2 id="aiHeading">Describe what you need</h2>
       <button class="btn ghost" id="aiClose">← Back to browsing</button>
+    </div>
+
+    <!-- The same two tabs as the browse view, and the same choice: a question
+         is put to one catalogue or the other, never to both. Here it also has
+         to be legible, because the dialog is opened from a tab the reader may
+         have switched several screens ago. -->
+    <div class="tabs" id="aiTabs">
+      <button class="tab" data-tab="plugins" aria-pressed="true">Plugins</button>
+      <button class="tab" data-tab="patches" aria-pressed="false">Patches</button>
     </div>
 
     <textarea id="aiQuestion" rows="4"
@@ -2032,10 +2047,10 @@ async function aiRounds(cfg, session, candidates, budget) {
   return true;
 }
 
-// Never a permanent switcher. A tab control sitting in here would let a
-// question written about plugins be answered with core patches, which are a
-// different proposition entirely -- this appears only once this catalogue has
-// been shown to hold nothing better.
+// Not the switcher -- the tabs above are that, and they leave the asking to
+// the reader. This is the offer to cross over, made only once this catalogue
+// has been shown to hold nothing better, and it carries the question with it
+// rather than asking for it again.
 function otherCatalogueNote() {
   const other = state.tab === "patches" ? "plugins" : "patches";
   return `<div class="note info"><b>Try the other catalogue?</b>
@@ -2051,10 +2066,7 @@ function bindOtherCatalogue() {
   if (!$("aiOtherTab")) return;
   $("aiOtherTab").addEventListener("click", async () => {
     const other = state.tab === "patches" ? "plugins" : "patches";
-    await switchTabRef(other);
-    $("aiHeading").textContent = other === "patches"
-      ? "Describe what you need — searching patches"
-      : "Describe what you need";
+    if (!(await switchTabRef(other))) return;
     $("browseView").hidden = true;
     $("aiView").hidden = false;
     runAI();
@@ -2100,6 +2112,10 @@ function bindAgain(session) {
 // Two requests, the same as a first ask: one to find another angle, one to
 // weigh what it retrieves.
 async function lookAgain(session, narrowing) {
+  // The catalogue can be switched while an answer is on screen. A further
+  // round for a question asked of plugins must not go looking through patches,
+  // so the offer stands only while the tab it was made under is still showing.
+  if (session.tab !== state.tab) return;
   const cfg = aiConfig();
   if (!cfg || !cfg.key) { $("aiPanel").hidden = false; return; }
   // Trimmed and capped. This is one condition on a question, and a paragraph
@@ -3239,7 +3255,10 @@ async function boot() {
   async function switchTab(name) {
     state.tab = name;
     state.category = null;
-    $("tabs").querySelectorAll(".tab").forEach(b =>
+    // Two strips, one choice: the browse tabs and the pair inside AI Mode are
+    // the same control seen from two views, so both are painted from the state
+    // rather than kept in step by hand.
+    document.querySelectorAll("#tabs .tab, #aiTabs .tab").forEach(b =>
       b.setAttribute("aria-pressed", String(b.dataset.tab === state.tab)));
     // Deep search is keyed by plugin id, so it can never match a patch.
     $("deepWrap").hidden = state.tab === "patches";
@@ -3270,12 +3289,15 @@ async function boot() {
           Browse them on the
           <a href="${APPSTORE}?tab=patches" target="_blank" rel="noopener">AppStore page</a>.
         </div>`;
-        return;
+        return false;
       }
     }
     renderChips();
     render();
     syncUrl();
+    // Whether the tab it was asked for is the one now showing. The message
+    // above lands in the browse list, which a caller in AI Mode cannot see.
+    return true;
   }
 
   switchTabRef = switchTab;
@@ -3478,23 +3500,11 @@ function setupAI() {
     if (narrow) narrow.addEventListener("click", () => { state.aiUseFilter = true; renderScope(); });
   };
 
-  // Swapping views rather than stacking one over the other: in AI mode the
-  // keyword filter, the chips and the browse list are all inapplicable, and
-  // leaving them behind a scrim only invites clicking them.
-  const openDialog = () => {
-    $("aiHeading").textContent = state.tab === "patches"
-      ? "Describe what you need — searching patches"
-      : "Describe what you need";
-    $("browseView").hidden = true;
-    $("aiView").hidden = false;
-    renderScope();
-    // Whatever is in the filter box is a reasonable starting point, but only
-    // as a seed -- from here on the two inputs are independent.
-    if (!$("aiQuestion").value && state.query.trim()) $("aiQuestion").value = state.query.trim();
-    if (!aiConfig() && !state.fromLink) $("aiPanel").hidden = false;
-
-    // Shown only before a first answer: once there are results on screen the
-    // reader has what they came for, and a standing offer to leave is noise.
+  // Shown only before a first answer: once there are results on screen the
+  // reader has what they came for, and a standing offer to leave is noise.
+  // It counts one catalogue, so switching tabs has to rewrite it -- an offer
+  // of 151 patch files made under the plugins tab is worse than no offer.
+  const renderEscape = () => {
     const kind = state.tab === "patches" ? "patch files" : "plugins";
     const total = (state.tab === "patches"
       ? state.index.patches.length || (state.index.counts || {}).patches
@@ -3505,6 +3515,65 @@ function setupAI() {
        <button class="linkish" id="aiEscapeBack">${total} ${kind} you can search
        and filter without one</button>.`;
     if ($("aiEscapeBack")) $("aiEscapeBack").addEventListener("click", () => $("aiClose").click());
+  };
+
+  // An answer outlives the tab it was asked from: the catalogue is a property
+  // of the question, not of the dialog. So switching does not throw the answer
+  // away -- it says which catalogue it came from, and leaves the question in
+  // the box for whoever wants to put it to the other one.
+  const markCatalogue = () => {
+    const stale = $("aiStale");
+    if (stale) stale.remove();
+    const answer = state.answer;
+    const old = Boolean(answer && answer.picks && answer.picks.length
+      && answer.tab !== state.tab);
+    // The offer to look again belongs to the answer, and the answer belongs to
+    // the other catalogue: pressing it here would search the wrong one. Hidden
+    // rather than removed, because switching back makes it good again.
+    const again = $("aiOut").querySelector(".ai-again");
+    if (again) again.hidden = old;
+    if (!old) return;
+    const from = answer.tab === "patches" ? "patches" : "plugins";
+    const now = state.tab === "patches" ? "patches" : "plugins";
+    $("aiOut").insertAdjacentHTML("afterbegin",
+      `<div class="note info" id="aiStale"><b>This answer is about ${from}</b>
+        It was asked of the ${from} catalogue. Press <em>Ask</em> to put the same
+        question to ${now}.</div>`);
+  };
+
+  $("aiTabs").querySelectorAll(".tab").forEach(button => {
+    button.addEventListener("click", async () => {
+      // Clicking the tab already showing would clear the category filter that
+      // the scope line underneath has just promised to honour.
+      if (button.dataset.tab === state.tab) return;
+      if (!(await switchTabRef(button.dataset.tab))) {
+        // Patches load on first use and that fetch can fail. Where it says so
+        // is the browse list, which is not the view anyone is looking at here.
+        await switchTabRef("plugins");
+        $("aiScope").textContent =
+          "The patch list could not be loaded. Still searching plugins.";
+        return;
+      }
+      renderScope();
+      renderEscape();
+      markCatalogue();
+    });
+  });
+
+  // Swapping views rather than stacking one over the other: in AI mode the
+  // keyword filter, the chips and the browse list are all inapplicable, and
+  // leaving them behind a scrim only invites clicking them.
+  const openDialog = () => {
+    $("browseView").hidden = true;
+    $("aiView").hidden = false;
+    renderScope();
+    markCatalogue();
+    // Whatever is in the filter box is a reasonable starting point, but only
+    // as a seed -- from here on the two inputs are independent.
+    if (!$("aiQuestion").value && state.query.trim()) $("aiQuestion").value = state.query.trim();
+    if (!aiConfig() && !state.fromLink) $("aiPanel").hidden = false;
+
+    renderEscape();
 
     $("aiQuestion").focus();
     syncUrl();
