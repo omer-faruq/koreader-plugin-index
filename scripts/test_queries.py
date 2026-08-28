@@ -78,6 +78,56 @@ def explain_failure(entries, query, expected, top):
 MIN_ENGLISH_SHARE = 0.85
 MAX_SILENT_SHARE = 0.05
 
+# Every case names a third-party repository, and any of them can be deleted,
+# renamed or transferred overnight by someone with no idea this suite exists.
+# That is not a ranking regression, and failing on it stops the nightly build
+# from publishing anything at all -- an unrelated stranger's `git push` taking
+# the site down until a human edits a TOML file. This build runs unattended by
+# design, so it has to survive the ecosystem moving under it.
+#
+# Three steps, in order of how much is still known.
+#
+# The owner was always incidental. A case asks "does a reading-streak tracker
+# win for this query", and `advokatb/readingstreak.koplugin` is how that was
+# spelled on the day it was written. When that exact id is gone, any plugin of
+# the same name answers the same question, and the catalogue is full of forks
+# that outlive their originals. So a case repoints itself by name first.
+#
+# Only when nothing of that name is left anywhere is the case genuinely about
+# something the ecosystem no longer has. It is reported and skipped, not failed.
+#
+# With a ceiling, because the same symptom has a second cause: if extraction
+# breaks or the index is truncated, *everything* goes missing at once, and a
+# suite that quietly skipped its way to green would be the worst possible
+# outcome. Churn takes out one case at a time; a broken build takes out most.
+MAX_RETIRED_SHARE = 0.25
+
+
+def slug_of(name):
+    """A plugin's name with the owner, the suffix and the punctuation gone."""
+    return "".join(rank.name_words(name.split("/", 1)[-1]))
+
+
+def resolve(expected, entries, by_id):
+    """Which entries a case is really about, now.
+
+    Returns the ids to judge against and how they were arrived at: `None` when
+    the case still names something in the index, or the substitutes found by
+    name when it does not.
+    """
+    live = [want for want in expected if want in by_id]
+    if live:
+        return live, None
+    # Short names are not distinctive enough to repoint on -- `sync` would
+    # match half the catalogue -- and the same floor is used for deciding a
+    # name is a name at all.
+    wanted = {slug_of(want) for want in expected}
+    wanted = {slug for slug in wanted if len(slug) >= rank.MIN_TITLE_SLUG}
+    if not wanted:
+        return [], None
+    moved = [e["id"] for e in entries if slug_of(rank.name_of(e)) in wanted]
+    return moved, (moved or None)
+
 
 def check_coverage(index):
     """Refuse a run that can no longer be searched, whatever it ranks.
@@ -137,30 +187,60 @@ def main():
 
     print(f"{len(cases)} queries against {len(entries)} plugins\n")
 
-    failures = []
+    by_id = {e["id"]: e for e in entries}
+    failures, retired, moved = [], [], []
     for case in cases:
         query = case["query"]
         expected = case["expect_top3"]
+        # Judged only against the answers that still exist. A case listing two
+        # right answers where one has been deleted is still a live case.
+        live, substitutes = resolve(expected, entries, by_id)
+        if substitutes:
+            moved.append((query, expected, substitutes))
+        if not live:
+            retired.append(query)
+            print(f"  gone  {query}")
+            print(f"          not in the index any more: {', '.join(expected)}")
+            print(f"          got:                       "
+                  f"{', '.join(e['id'] for e in rank.rank(entries, query, limit=TOP_N)) or '(nothing)'}")
+            continue
         top = [e["id"] for e in rank.rank(entries, query, limit=TOP_N)]
         # Any one of the expected answers in the top three is a pass: several
         # cases legitimately have more than one right answer, and the point is
         # that the user is shown something that solves their problem.
-        hit = any(want in top for want in expected)
+        hit = any(want in top for want in live)
         print(f"  {'ok  ' if hit else 'FAIL'}  {query}")
         if not hit:
-            print(f"          expected one of: {', '.join(expected)}")
+            print(f"          expected one of: {', '.join(live)}")
             print(f"          got:             {', '.join(top) or '(nothing)'}")
-            explain_failure(entries, query, expected, top)
+            explain_failure(entries, query, live, top)
             failures.append(query)
 
     print()
-    if failures or coverage_problems:
+    if moved:
+        print("Repointed by name -- the id in the file is gone, the plugin is not:")
+        for query, expected, substitutes in moved:
+            print(f"  {query}: {', '.join(expected)} -> {', '.join(substitutes)}")
+        print()
+    if retired:
+        print(f"{len(retired)} case(s) name a plugin the index no longer has. "
+              f"Retire or repoint them in {CASES.name}:")
+        for query in retired:
+            print(f"  {query}")
+        print()
+    too_many = len(retired) > MAX_RETIRED_SHARE * len(cases)
+    if failures or coverage_problems or too_many:
         if failures:
             print(f"{len(failures)}/{len(cases)} failed", file=sys.stderr)
         if coverage_problems:
             print(f"{len(coverage_problems)} coverage floor(s) breached", file=sys.stderr)
+        if too_many:
+            print(f"{len(retired)}/{len(cases)} cases have no answer left in the index, "
+                  f"over the {MAX_RETIRED_SHARE:.0%} ceiling -- that is an index "
+                  f"problem, not repositories going away", file=sys.stderr)
         return 1
-    print(f"all {len(cases)} passed")
+    judged = len(cases) - len(retired)
+    print(f"all {judged} passed" + (f" ({len(retired)} skipped)" if retired else ""))
     return 0
 
 

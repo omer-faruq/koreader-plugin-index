@@ -6,6 +6,13 @@
 # The build fails when an expected answer falls out of the top three. Add a
 # case whenever a recommendation comes out wrong: that is how the ranking gets
 # tuned by measurement rather than by guessing.
+#
+# The owner in an id is incidental. Nothing here is a claim about who hosts a
+# plugin -- only about which plugin should win -- so when an id stops existing
+# the suite looks for the same name under whatever owner has it now, and only
+# skips the case when nothing of that name is left anywhere. This build runs
+# unattended: a stranger deleting their repository must not be able to stop the
+# site from publishing.
 
 [[case]]
 query = "I want AI help while reading"

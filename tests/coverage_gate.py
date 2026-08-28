@@ -1,8 +1,10 @@
 """Prove the machinery that decides whether an entry can be found at all.
 
-Two mechanisms, tested together because they answer one question and nothing
-else in the suite covers either: the coverage gate, and the glossary that gives
-a Chinese-documented plugin an English match surface.
+Three mechanisms, tested together because they answer one question and nothing
+else in the suite covers any of them: the coverage gate, the glossary that
+gives a Chinese-documented plugin an English match surface, and the resolver
+that keeps the ranking suite pointed at the right entries as repositories move
+and disappear under it.
 
 
 A gate nobody has watched trip is indistinguishable from no gate at all, and
@@ -22,6 +24,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "scripts
 
 import build  # noqa: E402
 import extract  # noqa: E402
+import rank  # noqa: E402
 import test_queries  # noqa: E402
 
 
@@ -139,6 +142,81 @@ for name, fn in [
     ("the glossary ignores an English one", glossary_ignores_an_english_document),
     ("the glossary does not repeat a label", glossary_does_not_repeat_itself),
     ("the glossary respects its limit", glossary_is_bounded),
+]:
+    case(name, fn)
+
+
+# --------------------------------------------------------------- the resolver
+#
+# This build runs unattended, and every ranking case names a repository owned
+# by a stranger. What happens when one of them moves decides whether the site
+# keeps publishing or stops until somebody notices.
+
+
+def entries_of(*ids):
+    return [{"id": i, "repo": i.split("/", 1)[1]} for i in ids]
+
+
+def resolve(expected, entries):
+    return test_queries.resolve(expected, entries, {e["id"]: e for e in entries})
+
+
+def a_live_id_is_used_as_written():
+    entries = entries_of("advokatb/readingstreak.koplugin", "other/thing.koplugin")
+    live, substitutes = resolve(["advokatb/readingstreak.koplugin"], entries)
+    expect(live == ["advokatb/readingstreak.koplugin"], live)
+    expect(substitutes is None, "an id that still exists was not repointed")
+
+
+def a_moved_repository_repoints_by_name():
+    """The common case, and the one that used to stop the nightly build.
+
+    Deleted, renamed, transferred, or simply outlived by a fork -- from here
+    they all look the same, and the question the case asks is still answered by
+    the plugin of that name, whoever is hosting it today.
+    """
+    entries = entries_of("somebody-else/readingstreak.koplugin", "other/thing.koplugin")
+    live, substitutes = resolve(["advokatb/readingstreak.koplugin"], entries)
+    expect(live == ["somebody-else/readingstreak.koplugin"], live)
+    expect(substitutes == live, substitutes)
+
+
+def a_partly_live_case_is_not_repointed():
+    """One of two answers gone is still a live case, judged on the other."""
+    entries = entries_of("b/second.koplugin", "x/readingstreak.koplugin")
+    live, substitutes = resolve(["a/first.koplugin", "b/second.koplugin"], entries)
+    expect(live == ["b/second.koplugin"], live)
+    expect(substitutes is None, "a case with a live answer must not repoint")
+
+
+def a_vanished_plugin_retires():
+    """Nothing of that name anywhere. The case is about something gone."""
+    live, substitutes = resolve(["ghost/nowhere.koplugin"], entries_of("other/thing.koplugin"))
+    expect(live == [], live)
+    expect(substitutes is None, substitutes)
+
+
+def a_short_name_never_repoints():
+    """`sync` would repoint onto half the catalogue. Distinctive names only."""
+    entries = entries_of("someone/sync.koplugin")
+    live, _ = resolve(["gone/sync.koplugin"], entries)
+    expect(live == [], f"a {rank.MIN_TITLE_SLUG}-character floor should have refused this: {live}")
+
+
+def the_owner_is_not_part_of_the_name():
+    """Two owners, one plugin -- and `foldermemory` is not `memory`."""
+    entries = entries_of("Craftwork2720/foldermemory.koplugin", "t2ym5u/memory.koplugin")
+    live, _ = resolve(["someone/foldermemory.koplugin"], entries)
+    expect(live == ["Craftwork2720/foldermemory.koplugin"], live)
+
+
+for name, fn in [
+    ("an id that still exists is used as written", a_live_id_is_used_as_written),
+    ("a moved repository repoints by name", a_moved_repository_repoints_by_name),
+    ("one dead answer of two does not repoint", a_partly_live_case_is_not_repointed),
+    ("a plugin gone from the ecosystem retires", a_vanished_plugin_retires),
+    ("a short name never repoints", a_short_name_never_repoints),
+    ("the owner is not part of the name", the_owner_is_not_part_of_the_name),
 ]:
     case(name, fn)
 
