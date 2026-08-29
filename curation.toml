@@ -35,6 +35,9 @@ keywords = ["simpleui", "homescreen", "currently reading", "stats"]
 [plugins."zeeyado/koassistant.koplugin"]
 tier = "A"
 categories = ["ai"]
+purpose = "AI assistant for KOReader across many providers: ask about highlighted text, translate, explain and define it, and save the answer into the annotation. While reading it builds reference guides for the book -- summaries, recaps, discussion questions -- and a browsable X-Ray of characters, places and ideas that updates as you read and underlines known names in the text."
+keywords = ["ai assistant", "x-ray", "characters", "highlight", "translate", "explain", "spoiler protection"]
+note = "A client, not an AI service. Users must supply their own provider key or a local model."
 
 [plugins."tachibana-shin/rakuyomi"]
 tier = "A"
@@ -245,10 +248,235 @@ categories = ["dict", "reading"]
 purpose = "Overlays pinyin above Chinese characters as you read, in the manner of Kindle's character annotation. Five levels control how common a character has to be before it is left unannotated, so only the unfamiliar ones are marked. EPUB, DOCX and HTML."
 keywords = ["pinyin", "chinese", "annotation", "ruby text", "phonetic", "learning chinese", "furigana"]
 
+[plugins."miumiupy98-art/miuread-koreader"]
+categories = ["content", "sync"]
+purpose = "Unofficial WeChat Reading (微信读书) client for KOReader, aimed at Kindle: bookshelf, book download, highlights and thoughts, reading time and reading progress synced back to the account. Ships a stable and a beta release channel with over-the-air updates."
+keywords = ["weread", "wechat reading", "miuread", "chinese ebooks", "bookshelf", "progress sync", "reading time", "ota update"]
+note = "Unofficial community project. Its README states it began as a modified copy of finlater/weread.koplugin and is not affiliated with or endorsed by WeRead, Tencent or KOReader."
+
+[plugins."gytwo/pinyin_enhancement.koplugin"]
+categories = ["dict", "ui"]
+purpose = "Adds a candidate bar above KOReader's own pinyin keyboard: tap a candidate to type the characters. Frequency ordering that learns from what you pick, initial-letter pinyin, and extra dictionaries you can drop into a folder yourself, with configurable space and enter behaviour."
+keywords = ["pinyin", "input method", "ime", "chinese keyboard", "candidate bar", "word frequency", "lexicon"]
+note = "Its README warns that loading large extra dictionaries can exhaust device memory and freeze the device, and asks that the koreader folder be backed up first."
+
 [plugins."finlater/one.koplugin"]
 categories = ["content"]
 purpose = "Offline reader for the daily ONE (「ONE · 一个」, wufazhuce.com) publication: one image, one piece of writing and one question-and-answer each day, with the last seven days available on the device."
 keywords = ["one", "wufazhuce", "daily", "chinese magazine", "offline reading"]
+
+# --- the review queue: plugins with a following and no curated words of their
+# --- own, worked top-down by stars. Every one of these had the extractor's
+# --- leftovers where a description belongs -- a disclaimer, an install step,
+# --- or keywords like "without" and "leaving" -- and several had categories a
+# --- rule guessed from a passing word. Purpose, keywords and categories only.
+# --- Tier is a judgement about a plugin and not about its documentation, so
+# --- reading a README earns none of these an A.
+
+[plugins."fischer-hub/annas.koplugin"]
+categories = ["content", "library"]
+purpose = "Search Anna's Archive from KOReader and download documents straight to the device. It scrapes the site's own pages, so no account is needed -- and, as its README says, a change to those pages can break it."
+keywords = ["annas archive", "download", "search", "ebooks"]
+note = "Describes the repository's stated functionality only. Availability and legality vary by jurisdiction; do not advise on either."
+
+[plugins."ultimatejimmy/storefront.koplugin"]
+categories = ["files"]
+purpose = "Discover, install and update community plugins, user patches, fonts and screensavers from the device itself. Caches results so the catalogue survives losing the network, shows each entry's README in place, and keeps a versions tab for installing or ignoring a particular release."
+keywords = ["install", "update", "plugin manager", "patches", "fonts", "screensavers"]
+
+[plugins."stradichenko/audiobook.koplugin"]
+categories = ["reading", "content"]
+purpose = "Text-to-speech read-along: the spoken word is highlighted on the page and pages turn themselves, offline, through Piper or espeak-ng. It also plays music and audiobook files, and can browse an Audiobookshelf server, download from it and sync playback progress back."
+keywords = ["tts", "text to speech", "read along", "piper", "bluetooth", "audiobooks", "audiobookshelf"]
+
+[plugins."advokatb/updatesmanager.koplugin"]
+categories = ["files"]
+purpose = "Watches the GitHub repositories you name for newer versions of the patches and plugins you already have, and installs the ones you tick -- backing up what it replaces, checking files by MD5, and optionally preserving your own config and keys across an update."
+keywords = ["update", "updates", "plugin manager", "patches", "github", "backup"]
+
+[plugins."kristianpennacchia/zzz-readermenuredesign.koplugin"]
+categories = ["ui"]
+purpose = "Restyles the menus you meet while reading -- the highlight menu and the Dictionary Quick Lookup popup among them -- with icons and a cleaner layout, and supplies matching interfaces for a few other plugins."
+keywords = ["menu", "redesign", "highlight menu", "dictionary popup", "icons", "interface"]
+
+[plugins."peterboda236/readinginsights.koplugin"]
+categories = ["reading"]
+purpose = "Reading statistics popups built from KOReader's own statistics database, with nothing to configure: weekly averages and trends, daily and weekly streaks, monthly and yearly totals you can drill into, a heatmap and time-of-day breakdown, and a yearly finished-books goal."
+keywords = ["statistics", "reading stats", "streak", "heatmap", "reading goal", "history"]
+
+[plugins."Yuchen971/Kodashboard"]
+categories = ["reading"]
+purpose = "Starts a small web server on the device so a browser on your phone or laptop can show your reading data: library, progress, statistics, calendar activity and highlights."
+keywords = ["dashboard", "statistics", "web server", "reading data", "highlights"]
+note = "Its README says the plugin is primarily for its author's own use and is meant to be started, read and stopped again -- not left running, since networking is one of the biggest battery drains on a Kindle."
+
+[plugins."roygbyte/crossword.koplugin"]
+categories = ["games"]
+purpose = "Solve crosswords on the e-reader, from a folder of puzzle files you supply. Its README sets the plugin up against an archive of New York Times crosswords."
+keywords = ["crossword", "puzzle", "game", "nyt"]
+
+[plugins."SahandMalaei/ai-dictionary-koreader"]
+categories = ["dict", "ai"]
+purpose = "A dictionary that answers in context: it sends the selected text along with the words around it and the book it came from, so phrases, idioms and terms invented by a novel get a definition an ordinary dictionary cannot give. One button, no typing, and it can simplify a passage instead of defining it."
+keywords = ["ai dictionary", "definition", "explain", "context", "idioms", "simplify"]
+note = "A client, not an AI service. It defaults to OpenAI and takes any OpenAI-compatible endpoint; the key is yours to supply."
+
+[plugins."xusoo/shortcutstoolbar.koplugin"]
+categories = ["ui"]
+purpose = "A configurable shortcut bar for the reader and the file browser, either inside the menu or as a bar that stays on screen. Built-in shortcuts cover frontlight, night mode, Wi-Fi, bookmarks, search, contents and more, and you can add your own."
+keywords = ["toolbar", "shortcuts", "quick access", "menu", "buttons"]
+
+[plugins."oleasteo/koreader-screenlockpin"]
+categories = ["device", "ui"]
+purpose = "A PIN lock screen for KOReader: locks on wake-up or at boot, shows nothing but the wallpaper, the time and the battery, and slows itself down after repeated wrong attempts. The PIN is three to twelve digits and there is no confirm button."
+keywords = ["pin", "lock screen", "privacy", "passcode", "wake up"]
+note = "Its README describes it as privacy and casual protection, not cryptographic security."
+
+[plugins."0xmiki/telegramhighlights.koplugin"]
+categories = ["notes", "files"]
+purpose = "Sends highlights, notes and screenshots out of KOReader to a Telegram bot -- one selection at a time, or every bookmark in a book at once -- and can bring Wi-Fi up and put it back down around the send."
+keywords = ["telegram", "highlights", "bookmarks", "screenshots", "export"]
+note = "It sends to one specific bot named in its README, @bookshotsbot, rather than to a bot of your own."
+
+[plugins."finlater/kindlebtcontroller.koplugin"]
+categories = ["device"]
+purpose = "Turns a Bluetooth game controller or remote into a page turner for Kindle: map any button or joystick axis to page turns, chapter and bookmark jumps, brightness and twenty-odd other actions, with a key tester for finding codes and automatic reconnection."
+keywords = ["bluetooth", "controller", "page turner", "kindle", "remote", "key mapping"]
+
+[plugins."ebanDev/iconschanger.koplugin"]
+categories = ["ui"]
+purpose = "Swaps KOReader's icons for a pack downloaded from Iconify -- Lucide, Feather, Heroicons, Material and many others -- keeping a backup of the originals to restore, and optionally generating a matching pack for SimpleUI."
+keywords = ["icons", "icon pack", "iconify", "theme", "appearance"]
+
+[plugins."Lalocaballero/readmastery.koplugin"]
+categories = ["reading", "games"]
+purpose = "Turns reading into a game: XP for pages turned and minutes read, levels, daily streaks with tokens that protect one, and achievements for milestones like reading before dawn or a hundred pages in a sitting."
+keywords = ["gamification", "xp", "levels", "streak", "achievements"]
+
+[plugins."Fank1/foot-cream"]
+categories = ["reading"]
+purpose = "Converts the measurements in a book to the system you think in, both ways: feet to metres, Fahrenheit to Celsius. Either underlined so a tap shows the conversion, or rewritten in place. It scans the book once on the device, tells pounds the money from pounds the weight, and leaves idioms alone."
+keywords = ["units", "conversion", "metric", "imperial", "measurements", "offline"]
+
+[plugins."loeffner/WeatherLockscreen"]
+categories = ["ui", "device"]
+purpose = "Puts the current weather -- conditions, icon, temperature and detail -- on the sleep screen, in a choice of layouts, with caching so something is shown when there is no connection."
+keywords = ["weather", "sleep screen", "lockscreen", "screensaver", "temperature"]
+
+[plugins."KORComic/comicmeta.koplugin"]
+categories = ["library", "content"]
+purpose = "Reads the ComicInfo.xml metadata inside .cbz and .cbr archives and hands it to KOReader as custom metadata, so a comic carries its series, title and numbering like any other book."
+keywords = ["comic", "cbz", "cbr", "metadata", "comicinfo"]
+
+[plugins."kaikozlov/acsm.koplugin"]
+categories = ["library", "files"]
+purpose = "Opens the .acsm file a public-library loan gives you, on the device, and turns it into an ordinary EPUB or PDF you can read in KOReader -- no computer and no Adobe Digital Editions, using a one-time anonymous device activation it sets up itself."
+keywords = ["acsm", "adobe", "library loan", "libby", "epub"]
+note = "Describes the repository's stated functionality only. What a borrowed file may be converted to varies by jurisdiction and by library terms; do not advise on either."
+
+[plugins."kristianpennacchia/wordreference.koplugin"]
+categories = ["dict"]
+purpose = "Looks up a highlighted word or phrase on WordReference from inside KOReader, in any of its language pairs, and can take over the dictionary quick-lookup popup so a short press goes there instead."
+keywords = ["wordreference", "dictionary", "translation", "lookup", "languages"]
+
+[plugins."grimmory-tools/grimmory.koplugin"]
+categories = ["library", "sync"]
+purpose = "Client for a Grimmory server: read the books it holds, sync your shelves and report reading progress automatically. It updates itself from its own menu."
+keywords = ["grimmory", "server", "shelves", "progress sync", "self-hosted"]
+note = "Its README calls this alpha software and warns that using it may require erasing data on the device or on the server."
+
+[plugins."prasy-loyola/notes.koplugin"]
+categories = ["notes"]
+purpose = "A canvas for handwritten notes taken while reading: draw with a stylus or a finger, add pages as you fill them, erase, set a background template, and save the lot out as PNG files."
+keywords = ["handwriting", "stylus", "notes", "drawing", "canvas"]
+
+[plugins."advokatb/readingstreak.koplugin"]
+categories = ["reading"]
+purpose = "Daily and weekly reading streaks in the manner of Kindle's, with a calendar view of the months behind you, goals and notifications when you reach one, and an import of the history already in KOReader's statistics database."
+keywords = ["streak", "statistics", "calendar", "goals", "reading habit"]
+
+[plugins."moritz-john/homeassistant.koplugin"]
+categories = ["misc"]
+purpose = "Control Home Assistant from the e-reader: call actions on entities, areas or labels with their own data, query an entity's state and attributes, and evaluate templates. Configured as plain text and bindable to gestures."
+keywords = ["home assistant", "smart home", "automation", "entities", "gestures"]
+
+[plugins."kodermike/airplanemode.koplugin"]
+categories = ["device"]
+purpose = "One action to take the device off the network: it backs up the settings file, disables Wi-Fi and the plugins you have listed as networked, and restores your previous preferences when you turn it back off."
+keywords = ["airplane mode", "wifi", "offline", "battery", "plugins"]
+
+[plugins."xblain/annotationsviewer.koplugin"]
+categories = ["notes"]
+purpose = "One place to browse every highlight and note across all your books: filter by colour, style, book, tag, chapter or the words in them, edit a note or change a highlight's style in place, delete it, or open the book at the passage it came from."
+keywords = ["annotations", "highlights", "notes", "filter", "browse"]
+
+[plugins."Syakhisk/readingruler.koplugin"]
+categories = ["reading"]
+purpose = "A movable underline that marks the line you are on and moves by tap, swipe or a gesture of your choosing, for guided reading and focus. Tap the ruler itself to reposition it on any line."
+keywords = ["ruler", "focus", "guided reading", "underline", "line"]
+
+[plugins."Shac0x/charactertracker.koplugin"]
+categories = ["reading", "notes"]
+purpose = "Keeps track of who is who in a long novel: add a character from the highlight popup, give them aliases, notes, a role and relationships to other characters, have their names underlined in the text to tap, and share one list across a whole series."
+keywords = ["characters", "character tracker", "relationships", "aliases", "series"]
+
+[plugins."Arararararagi/charactertracker.koplugin"]
+categories = ["reading", "notes"]
+purpose = "Fork of Shac0x's Character Tracker with the same job -- characters, aliases, notes, roles, relationships and underlined names -- plus pinning and sorting, search, per-character underline opt-out, and an occurrence count with first and last appearance."
+keywords = ["characters", "character tracker", "relationships", "aliases", "series"]
+
+[plugins."arthurrump/syncthing.koplugin"]
+categories = ["sync"]
+purpose = "Starts and stops a Syncthing daemon from KOReader's Network menu, so books and settings sync with your other machines. You supply the Syncthing binary for your device."
+keywords = ["syncthing", "sync", "network", "daemon", "self-hosted"]
+
+[plugins."omer-faruq/sudoku.koplugin"]
+categories = ["games"]
+purpose = "Sudoku on the e-reader: generate a puzzle at three difficulties or load one from a bank of puzzle files, with touch-friendly controls and progress saved as you go."
+keywords = ["sudoku", "puzzle", "game", "offline"]
+
+[plugins."Shac0x/maximum.koplugin"]
+categories = ["reading"]
+purpose = "Manga and comic reading aid: divides the page into four quadrants that a two-finger tap zooms to fullscreen, rotates landscape pages or splits them into two views, and reads right-to-left when zoomed. CBZ, CBR and PDF."
+keywords = ["manga", "comic", "zoom", "rotate", "cbz", "cbr"]
+
+[plugins."JorgeTheFox/koreader-dynamic-panelzoom"]
+categories = ["reading"]
+purpose = "Finds the panels on a comic or manga page as you read it and shows them one at a time, masking the rest. Nothing is prepared in advance -- it analyses the page on the fly -- and it reads either direction, with a long press for free zoom."
+keywords = ["panel zoom", "comic", "manga", "panels", "detection"]
+
+[plugins."qewer33/quickrss.koplugin"]
+categories = ["web"]
+purpose = "Standalone RSS reader for KOReader: a paginated list of thumbnail cards with read and unread tracking, articles rendered by KOReader's own HTML engine, images cached ahead of time, and full text pulled in for feeds that publish only a summary."
+keywords = ["rss", "feeds", "news", "articles", "offline", "thumbnails"]
+
+[plugins."FadedSwatz/quickrss.koplugin"]
+categories = ["web"]
+purpose = "Presents itself as a fast, standalone RSS reader for KOReader, but its README is written for a Windows desktop program: system requirements, an executable to double-click, and troubleshooting for when it will not start."
+keywords = ["rss", "feeds", "articles", "quickrss"]
+note = "Unrelated to qewer33/quickrss.koplugin despite carrying the same name and the same one-line description. Every download link in its README points at a zip committed inside the repository rather than at a release, and the instructions tell the reader to run an executable and to disable antivirus if it is blocked. Treat it with caution."
+
+[plugins."flip-rossi/readeck.koplugin"]
+categories = ["web"]
+purpose = "Talks to your own Readeck server's API from KOReader: browse bookmarks and collections, and add a bookmark by tapping a link while you read, with default labels of your choosing."
+keywords = ["readeck", "read later", "bookmarks", "self-hosted", "articles"]
+note = "Its README describes the plugin as early development that may not always work as expected."
+
+[plugins."omer-faruq/instapaper.koplugin"]
+categories = ["web"]
+purpose = "Read an Instapaper account in KOReader: browse unread, starred, archived and custom folders, download articles as HTML or as EPUB with images, a cover and a table of contents built from the headings, and archive, star or delete them from the list."
+keywords = ["instapaper", "read later", "articles", "epub", "download"]
+
+[plugins."artemartemenko/KOReader_MultiUser.koplugin"]
+categories = ["misc"]
+purpose = "Isolated user profiles on one KOReader install: each profile keeps its own settings, reading history, plugins and patches, and -- as long as each person keeps their books in a separate folder -- its own positions and bookmarks. Ships as a plugin and a patch together."
+keywords = ["multi user", "profiles", "shared device", "settings", "history"]
+
+[plugins."Evgeniy-94/TelegramDownloader.koplugin"]
+categories = ["files"]
+purpose = "Gets files onto the e-reader through a Telegram bot of your own: message the bot a document and download it from KOReader into a folder you choose."
+keywords = ["telegram", "download", "transfer", "files", "bot"]
+
 
 # -------------------------------------------------------------------- glossary
 #
@@ -347,8 +575,8 @@ between = ["omer-faruq/webbrowser.koplugin", "iceyear/readeck.koplugin"]
 say = "The browser searches and reads pages directly. Readeck is an integration with a Readeck server you already run, so it is a read-later workflow rather than a browser."
 
 [[distinctions]]
-between = ["omer-faruq/simpleui_ext.koplugin", "doctorhetfield-cmd/simpleui.koplugin", "JoeBumm/Koreader-Menu-customizer", "AnthonyGress/zen_ui.koplugin", "Euphoriyy/appearance.koplugin"]
-say = "SimpleUI Ext adds modules to SimpleUI and needs it installed. Menu Customizer hides entries from the menus you already have. Zen UI and Appearance change how KOReader looks without replacing the home screen. Different jobs, not competing versions of one."
+between = ["omer-faruq/simpleui_ext.koplugin", "doctorhetfield-cmd/simpleui.koplugin", "JoeBumm/Koreader-Menu-customizer", "AnthonyGress/zen_ui.koplugin", "Euphoriyy/appearance.koplugin", "kristianpennacchia/zzz-readermenuredesign.koplugin"]
+say = "SimpleUI Ext adds modules to SimpleUI and needs it installed. Menu Customizer hides entries from the menus you already have. The last three change how KOReader looks without replacing the home screen, and they reach different parts of it: Zen UI strips the interface back to the page, Appearance gathers the look-and-feel settings into one place, and Reader Menu Redesign restyles the menus you meet while reading, the highlight menu and the dictionary popup among them. Different jobs, not competing versions of one."
 
 [[distinctions]]
 between = ["doctorhetfield-cmd/simpleui.koplugin", "AndyHazz/bookshelf.koplugin"]
@@ -356,7 +584,7 @@ say = "Both replace the home screen and you would install one, not both. SimpleU
 
 [[distinctions]]
 between = ["omer-faruq/appstore.koplugin", "ultimatejimmy/storefront.koplugin", "advokatb/updatesmanager.koplugin"]
-say = "Three separate projects for installing and updating plugins from the device. AppStore and Storefront both browse and install; Updates Manager only tracks updates across repositories you name."
+say = "Three ways to install and update from the device, and only two of them browse anything. AppStore and Storefront both show a catalogue you can install from -- Storefront began as a fork of AppStore and has since gone its own way, adding fonts, screensavers and a versions tab. Updates Manager has no catalogue at all: it watches the repositories you name for newer versions of what you already have, and installs those."
 
 [[distinctions]]
 between = ["ZlibraryKO/zlibrary.koplugin", "OctoNezd/zlibrary.koplugin"]
@@ -364,20 +592,64 @@ say = "Two independent Z-Library clients by different authors, not versions of o
 
 [[distinctions]]
 between = ["stradichenko/audiobook.koplugin", "naleo/audiobookshelf.koplugin"]
-say = "Audiobook is read-along inside a book. Audiobookshelf connects to an Audiobookshelf server to browse and download. Different jobs that share a word."
+say = "Both can reach an Audiobookshelf server, so the names are not the difference. Audiobookshelf is a library client and nothing else: browse the server, download books. Audiobook is a listening plugin -- text-to-speech read-along with the spoken word highlighted on the page, plus playback of audio files -- and its server support is one source among several."
 
 [[distinctions]]
-between = ["ultimatejimmy/xray.koplugin", "Arararararagi/charactertracker.koplugin"]
-say = "Both follow characters through a book. X-Ray builds timelines and insights using an AI provider you supply; Character Tracker does not require one."
+between = ["ultimatejimmy/xray.koplugin", "Shac0x/charactertracker.koplugin"]
+say = "Both follow characters through a book, and they get there differently. X-Ray reads the book with an AI provider you supply and builds the entries and timelines for you. Character Tracker asks for no provider at all: you add each character, alias and relationship yourself as you meet them, and it underlines those names in the text from then on."
+
+[[distinctions]]
+between = ["Shac0x/charactertracker.koplugin", "Arararararagi/charactertracker.koplugin"]
+say = "The same plugin under the same name: Arararararagi's is a fork of Shac0x's. The fork adds pinning, sorting and search, a per-character underline opt-out, and occurrence counts with first and last appearance; the original is the one almost everyone has installed."
+
+[[distinctions]]
+between = ["omer-faruq/rssreader.koplugin", "qewer33/quickrss.koplugin"]
+say = "Two standalone RSS readers, and where your feeds live decides between them. RSS Reader signs in to an aggregator -- CommaFeed, FreshRSS, Miniflux, NewsBlur or a Fever API -- so read state, stars and folders follow you between devices; it also reads a local feed list. QuickRSS keeps everything on the device: it fetches the feeds itself, tracks read and unread locally, caches the images, and pulls in the full article when a feed publishes only a summary."
+
+[[distinctions]]
+between = ["qewer33/quickrss.koplugin", "FadedSwatz/quickrss.koplugin"]
+say = "Same name, and only one of them is the plugin people mean. qewer33's is the RSS reader described everywhere else in this catalogue. FadedSwatz's carries the identical name and the identical one-line description, but its README is written for a Windows desktop program and every download it offers is a zip committed inside the repository. If you were looking for QuickRSS, qewer33's is the one."
+
+[[distinctions]]
+between = ["iceyear/readeck.koplugin", "flip-rossi/readeck.koplugin"]
+say = "Two independent clients for the same Readeck server, by different authors, not versions of one project. iceyear's is the fuller read-later workflow. flip-rossi's is smaller and its own README calls it early development: browse bookmarks and collections, and save a link you tap while reading."
+
+[[distinctions]]
+between = ["JorgeTheFox/koreader-dynamic-panelzoom", "Shac0x/maximum.koplugin"]
+say = "Both magnify part of a comic page, and they differ in how they decide what to magnify. Dynamic Panel Zoom finds the actual panels as you read and steps through them one at a time. Maximum does not look at the artwork: it splits the page into four fixed quadrants you zoom by two-finger tap, and adds rotation and splitting for landscape pages."
 
 [[distinctions]]
 between = ["KORComic/comicreader.koplugin", "tachibana-shin/rakuyomi"]
 say = "Comic Reader improves how paged comics are displayed; Rakuyomi fetches manga from online sources. One is a reading experience, the other is where the content comes from."
 
 [[distinctions]]
-between = ["finlater/weread.koplugin", "miumiupy98-art/weread.koplugin-fixed", "Mr54233/pickthought.koplugin"]
-say = "All three reach WeChat Reading and they do different jobs. finlater's reads the service inside KOReader with progress and reading time synced back. The -fixed fork descends from a different upstream and leads with exporting books to EPUB, optionally carrying highlights and thoughts. PickThought does not read the service at all: it takes highlights and public thoughts and injects them into an EPUB you already have."
+between = ["finlater/weread.koplugin", "miumiupy98-art/miuread-koreader", "miumiupy98-art/weread.koplugin-fixed", "Mr54233/pickthought.koplugin"]
+say = "Four ways to WeChat Reading, three of them from one root. finlater's is that root -- it reads the service inside KOReader with progress and reading time synced back -- and the repository was once named QiuYukang/weread.koplugin, which is why its descendants credit a name GitHub no longer answers to. Both of miumiupy98-art's descend from it: the -fixed fork is a modest enhancement that leads with exporting books to EPUB, optionally carrying highlights and thoughts, while MiuRead began as a modified copy of an early version and has been rebuilt well past it, with stable and beta release channels and over-the-air updates. Of those two, MiuRead is the one still being worked on. PickThought does not read the service at all: it takes highlights and public thoughts and injects them into an EPUB you already have."
 
 [[distinctions]]
-between = ["Merpyzf/pinyinime.koplugin", "zhouwt/pinyin.koplugin"]
-say = "One word, opposite directions. Pinyin IME is for typing Chinese: it adds a candidate bar and sentence input to the keyboard. Pinyin for KOReader is for reading it: it prints pinyin above the characters on the page and types nothing."
+between = ["Merpyzf/pinyinime.koplugin", "gytwo/pinyin_enhancement.koplugin", "zhouwt/pinyin.koplugin"]
+say = "One word, three plugins: two for typing Chinese and one for reading it. Pinyin IME is the deeper of the two typists -- a full word list, whole-sentence input, five double-pinyin schemes and personalised learning, all offline. Pinyin Enhancement is the lighter one: a candidate bar over KOReader's own pinyin keyboard, ordered by how often you pick a word, with extra dictionaries you can add yourself. Pinyin for KOReader types nothing at all; it prints pinyin above the characters on the page as you read."
+
+
+# ------------------------------------------------------------------- discovery
+#
+# Repositories that are real plugins and that no discovery query can reach: no
+# `koreader-plugin` topic, no ".koplugin" in the name. They are not tier C,
+# they are absent. Widening the queries was decided against on the patch side
+# already -- classification by file shape misfiles things, and this catalogue
+# is worth something only while its classifications hold.
+#
+# Naming one here is judgement about where to look, nothing more. Every fact
+# still comes from extraction and the tier is earned the same way as everyone
+# else's. A seed that has been deleted or renamed warns and is skipped, on
+# every run: one stranger's repository must not brick the nightly build.
+#
+# The cheaper fix, per seed, is an issue on the repository asking its author to
+# add the `koreader-plugin` topic; when they do, the line here can go. This
+# list is for the gap in between, and for authors who never answer.
+
+[discovery]
+extra_plugins = [
+  # main.lua and _meta.lua at the root, MIT licensed, no topics, no description.
+  "iamnotwassim/focusruler",
+]
