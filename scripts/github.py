@@ -35,14 +35,11 @@ SEARCH_CAP = 900
 #
 # So the second level is asked for separately, by TREES_QUERY below, and only
 # for the repositories whose root shows nothing.
-SEARCH_QUERY = """
-query($q: String!, $after: String) {
-  rateLimit { remaining resetAt }
-  search(query: $q, type: REPOSITORY, first: 20, after: $after) {
-    repositoryCount
-    pageInfo { hasNextPage endCursor }
-    nodes {
-      ... on Repository {
+# The fields themselves live in one place because two queries ask for them: the
+# search below, and REPO_QUERY, which asks for a single repository by name. A
+# seeded repository must arrive shaped exactly like a searched one, or every
+# rule downstream would need to know where it came from.
+REPO_FIELDS = """
         nameWithOwner
         name
         owner { login }
@@ -63,9 +60,29 @@ query($q: String!, $after: String) {
         root: object(expression: "HEAD:") {
           ... on Tree { entries { name type } }
         }
-      }
+"""
+
+SEARCH_QUERY = """
+query($q: String!, $after: String) {
+  rateLimit { remaining resetAt }
+  search(query: $q, type: REPOSITORY, first: 20, after: $after) {
+    repositoryCount
+    pageInfo { hasNextPage endCursor }
+    nodes {
+      ... on Repository {""" + REPO_FIELDS + """      }
     }
   }
+}
+"""
+
+# One repository, named rather than searched for. This is how a discovery seed
+# from curation.toml enters the pipeline: a plugin whose author used neither
+# the `koreader-plugin` topic nor ".koplugin" in the name is unreachable by any
+# search, and asking for it directly costs one request.
+REPO_QUERY = """
+query($owner: String!, $name: String!) {
+  rateLimit { remaining resetAt }
+  repository(owner: $owner, name: $name) {""" + REPO_FIELDS + """  }
 }
 """
 
@@ -321,6 +338,21 @@ class Client:
             if found:
                 self._log(f"    {label}: {found}")
                 yield from self._page_all(sub)
+
+    # -------------------------------------------------------------------- repo
+
+    def fetch_repo(self, owner, name):
+        """One repository, in the shape a search node has, or None.
+
+        None covers every way a seed can stop existing -- deleted, renamed,
+        turned private, emptied of commits. GitHub answers all of them with a
+        null repository and a message, which `graphql` already downgrades to a
+        warning, so the caller only has to check what came back.
+        """
+        data = self.graphql(REPO_QUERY, {"owner": owner, "name": name})
+        limit = (data or {}).get("rateLimit") or {}
+        self.remaining = limit.get("remaining", self.remaining)
+        return (data or {}).get("repository")
 
     # ------------------------------------------------------------------- trees
 

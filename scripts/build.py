@@ -80,6 +80,7 @@ def load_curation():
         "plugins": data.get("plugins", {}),
         "patches": data.get("patches", {}),
         "distinctions": data.get("distinctions", []),
+        "discovery": data.get("discovery", {}),
         # Longest key first, so 微信读书 is considered before 读书. Both may
         # match and both labels are true, but the order keeps the specific
         # label ahead of the general one in a list that gets truncated.
@@ -438,7 +439,7 @@ def collect_patches(client, curation, since=None):
     return entries, touched_repos, len(repos)
 
 
-def collect_plugins(client, since=None):
+def collect_plugins(client, curation, since=None):
     """Run every discovery query, de-duplicating by repository id."""
     found = {}
     for base in PLUGIN_QUERIES:
@@ -447,8 +448,42 @@ def collect_plugins(client, since=None):
             query += f" pushed:>{since}"
         for node in client.search(query):
             found[node["nameWithOwner"]] = node
+    add_seeds(client, curation, found)
     deepen_roots(client, found)
     return found
+
+
+def add_seeds(client, curation, found):
+    """Add the repositories curation.toml names that no query reaches.
+
+    Discovery is four queries: the `koreader-plugin` topic, or ".koplugin" in
+    the repository name. An author who used neither has written a plugin the
+    catalogue cannot see at all -- not tier C, absent. Broadening the queries
+    was refused on the patch side for a reason that holds here too: classifying
+    by file shape misfiles things, and this catalogue is worth reading only
+    while its classifications hold.
+
+    So the judgement is which repository to look at, and nothing more. A seed
+    enters shaped like any search result; tiering, extraction and categories
+    never learn where it came from.
+
+    Seeded on every run, diff included, because one request is cheaper than a
+    carry-over rule -- and a seed whose repository has gone warns and is
+    skipped, so a stranger deleting their work cannot fail the nightly build.
+    """
+    for seed in curation.get("discovery", {}).get("extra_plugins", []):
+        owner, _, name = seed.partition("/")
+        if not owner or not name:
+            print(f"  seed '{seed}' is not owner/name, skipping")
+            continue
+        if seed in found:
+            continue
+        node = client.fetch_repo(owner, name)
+        if not node:
+            print(f"  seed '{seed}' did not answer, skipping")
+            continue
+        found[node["nameWithOwner"]] = node
+        print(f"  seeded {node['nameWithOwner']}")
 
 
 def deepen_roots(client, nodes):
@@ -728,7 +763,7 @@ def main():
         print("full mode: enumerating everything")
 
     print("collecting plugins…")
-    nodes = collect_plugins(client, since)
+    nodes = collect_plugins(client, curation, since)
     print(f"  {len(nodes)} repositories returned")
     attach_english_readmes(client, nodes)
 

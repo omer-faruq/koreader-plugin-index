@@ -87,6 +87,19 @@ The generator merges this over everything it extracted and never overwrites it.
 Pull requests are welcome — curation should not depend on one person, and this
 file is small enough to review.
 
+The same file names the repositories discovery cannot reach. A plugin whose
+author used neither the `koreader-plugin` topic nor `.koplugin` in the name is
+returned by no query, so it is absent rather than low-ranked; listing it under
+`[discovery]` feeds it into extraction and it earns its tier like everything
+else.
+
+```toml
+[discovery]
+extra_plugins = [
+  "iamnotwassim/focusruler",
+]
+```
+
 ## Running it locally
 
 Nothing to install; Python 3.11+ is the only requirement. GitHub's GraphQL API
