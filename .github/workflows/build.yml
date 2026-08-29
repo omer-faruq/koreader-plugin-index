@@ -100,6 +100,13 @@ jobs:
       - name: Diff window
         run: python tests/diff_window.py
 
+      # Seeded plugins are the ones no search returns, so nothing else in this
+      # workflow would notice them going missing -- a batching slip drops the
+      # twenty-first quietly, and a deleted seed answers with a null that must
+      # not take the rest of its batch, or the run, down with it.
+      - name: Discovery seeds
+        run: python tests/discovery_seeds.py
+
       # The page reimplements rank.py in JavaScript. If they drift, the quality
       # suite keeps passing while users see different results.
       - name: Ranking parity

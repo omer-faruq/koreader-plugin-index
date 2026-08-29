@@ -467,23 +467,35 @@ def add_seeds(client, curation, found):
     enters shaped like any search result; tiering, extraction and categories
     never learn where it came from.
 
-    Seeded on every run, diff included, because one request is cheaper than a
-    carry-over rule -- and a seed whose repository has gone warns and is
-    skipped, so a stranger deleting their work cannot fail the nightly build.
+    Asked for on every run, diff included -- and not to keep the index from
+    losing them, which the carry-over further down already does for anything
+    published. A seed is by definition a repository no query returns, so
+    `pushed:>since` can never select it, and without asking outright its stars,
+    push date and README would freeze until the next full build. One batched
+    request buys the whole list; a seed that has gone warns and is skipped.
     """
+    wanted = []
     for seed in curation.get("discovery", {}).get("extra_plugins", []):
         owner, _, name = seed.partition("/")
         if not owner or not name:
             print(f"  seed '{seed}' is not owner/name, skipping")
             continue
-        if seed in found:
-            continue
-        node = client.fetch_repo(owner, name)
+        # Already discovered: the author added the topic, or renamed the repo
+        # to end in .koplugin. Nothing to fetch, and the curation.toml line can
+        # go whenever someone notices.
+        if seed not in found:
+            wanted.append(seed)
+    if not wanted:
+        return
+
+    seeded = client.fetch_repos(wanted)
+    for seed in wanted:
+        node = seeded.get(seed)
         if not node:
             print(f"  seed '{seed}' did not answer, skipping")
             continue
         found[node["nameWithOwner"]] = node
-        print(f"  seeded {node['nameWithOwner']}")
+    print(f"  seeded {len(seeded)} of {len(wanted)} named")
 
 
 def deepen_roots(client, nodes):

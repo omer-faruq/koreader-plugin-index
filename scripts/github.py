@@ -36,9 +36,9 @@ SEARCH_CAP = 900
 # So the second level is asked for separately, by TREES_QUERY below, and only
 # for the repositories whose root shows nothing.
 # The fields themselves live in one place because two queries ask for them: the
-# search below, and REPO_QUERY, which asks for a single repository by name. A
-# seeded repository must arrive shaped exactly like a searched one, or every
-# rule downstream would need to know where it came from.
+# search below, and REPOS_QUERY, which asks for repositories by name. A seeded
+# repository must arrive shaped exactly like a searched one, or every rule
+# downstream would need to know where it came from.
 REPO_FIELDS = """
         nameWithOwner
         name
@@ -75,14 +75,23 @@ query($q: String!, $after: String) {
 }
 """
 
-# One repository, named rather than searched for. This is how a discovery seed
+# Repositories named rather than searched for. This is how a discovery seed
 # from curation.toml enters the pipeline: a plugin whose author used neither
-# the `koreader-plugin` topic nor ".koplugin" in the name is unreachable by any
-# search, and asking for it directly costs one request.
-REPO_QUERY = """
-query($owner: String!, $name: String!) {
+# the `koreader-plugin` topic nor ".koplugin" in the name is unreachable by
+# every search, so it is asked for outright.
+#
+# Aliased and batched from the start, like TREES_QUERY and for the same reason,
+# even though the seed list currently holds one line. A search page already
+# carries twenty repositories with their READMEs, so twenty seeds in one
+# request is a known load rather than a new one -- and at one seed it costs
+# exactly what asking for one repository costs. What it buys is that the list
+# can grow without a second code path appearing beside this one.
+REPOS_QUERY_HEAD = """
+query {
   rateLimit { remaining resetAt }
-  repository(owner: $owner, name: $name) {""" + REPO_FIELDS + """  }
+"""
+
+REPOS_QUERY_TAIL = """
 }
 """
 
@@ -138,6 +147,17 @@ FILES_QUERY_TAIL = """
 
 def _gql_string(value):
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _repos_query_alias(i, owner, name):
+    """One aliased repository for REPOS_QUERY.
+
+    Built rather than formatted: REPO_FIELDS is full of braces, and doubling
+    every one of them so str.format would survive costs more legibility than
+    the interpolation is worth.
+    """
+    return (f"  r{i}: repository(owner: {_gql_string(owner)}, "
+            f"name: {_gql_string(name)}) {{" + REPO_FIELDS + "  }")
 
 
 class RateLimited(Exception):
@@ -339,20 +359,34 @@ class Client:
                 self._log(f"    {label}: {found}")
                 yield from self._page_all(sub)
 
-    # -------------------------------------------------------------------- repo
+    # ------------------------------------------------------------------- repos
 
-    def fetch_repo(self, owner, name):
-        """One repository, in the shape a search node has, or None.
+    def fetch_repos(self, ids, batch=20):
+        """Repositories named by `owner/name`, in the shape a search node has.
 
-        None covers every way a seed can stop existing -- deleted, renamed,
-        turned private, emptied of commits. GitHub answers all of them with a
-        null repository and a message, which `graphql` already downgrades to a
-        warning, so the caller only has to check what came back.
+        Keyed by the id asked for, so a caller can tell which of its seeds came
+        back. One that did not is simply absent -- deleted, renamed, turned
+        private, emptied of commits all arrive as a null alias beside an error
+        message, which `graphql` already downgrades to a warning. A seed is one
+        stranger's repository and must never be able to fail a build.
         """
-        data = self.graphql(REPO_QUERY, {"owner": owner, "name": name})
-        limit = (data or {}).get("rateLimit") or {}
-        self.remaining = limit.get("remaining", self.remaining)
-        return (data or {}).get("repository")
+        result = {}
+        for start in range(0, len(ids), batch):
+            chunk = ids[start:start + batch]
+            parts = []
+            for i, full in enumerate(chunk):
+                owner, _, name = full.partition("/")
+                parts.append(_repos_query_alias(i, owner, name))
+            data = self.graphql(
+                REPOS_QUERY_HEAD + "\n".join(parts) + REPOS_QUERY_TAIL, {})
+            limit = (data or {}).get("rateLimit") or {}
+            self.remaining = limit.get("remaining", self.remaining)
+
+            for i, full in enumerate(chunk):
+                repo = (data or {}).get(f"r{i}")
+                if repo:
+                    result[full] = repo
+        return result
 
     # ------------------------------------------------------------------- trees
 
