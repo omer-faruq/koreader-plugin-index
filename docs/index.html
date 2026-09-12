@@ -1914,7 +1914,11 @@ async function runAI() {
     // Counted after a call returns, not before it goes out. A round that
     // failed retrieved candidates the model never saw, and reporting them as
     // weighed would overstate what the answer rests on.
-    weighed: 0, note: "", failed: null,
+    weighed: 0, note: "",
+    // The note of the latest round that found nothing, held back rather than
+    // shown. See where it is set: it describes that round's own shortlist, not
+    // the answer, so it is only worth reading when no round found anything.
+    barrenNote: "", failed: null,
     // Set when a round had to ask with fewer candidates than the settings say,
     // and cleared once the answer has admitted it.
     trimmed: null
@@ -2016,6 +2020,7 @@ async function aiRounds(cfg, session, candidates, budget) {
     session.weighed += candidates.length;
     candidates.forEach(e => byId.set(e.id, e));
 
+    const had = merged.size;
     for (const p of result.picks || []) {
       if (!byId.has(p.id)) continue;
       const score = Number.isFinite(+p.fit) ? +p.fit : null;
@@ -2030,7 +2035,17 @@ async function aiRounds(cfg, session, candidates, budget) {
                            seq: kept ? kept.seq : seq });
       }
     }
-    if (result.note) session.note = result.note;
+    // A round that added no new pick is speaking about its own shortlist, and
+    // it has been shown `already_found`: its note is routinely "nothing here
+    // fits, the ones already found cover this". Printed as the answer's Note,
+    // above picks the earlier rounds did find, that reads as the whole search
+    // having failed -- the commonest misreading of a multi-round answer. So it
+    // is set aside, and only spoken if no round ever found anything, where it
+    // is the best explanation of the emptiness there is.
+    if (result.note) {
+      if (merged.size > had) { session.note = result.note; session.barrenNote = ""; }
+      else session.barrenNote = result.note;
+    }
 
     const again = searchTerms(result.search_again || [], 8);
     if (!again.length || roundsLeft <= 0) break;
@@ -2225,7 +2240,8 @@ function renderAnswer(session) {
   if (!picks.length) {
     $("aiOut").innerHTML = failNote + trimNote +
       `<div class="note info"><b>Nothing in the shortlist fits</b>${
-        esc(session.note || "The model found no candidate that actually does this.")}${
+        esc(session.note || session.barrenNote
+          || "The model found no candidate that actually does this.")}${
         searchedAgainFor.length
           ? ` It searched again for ${esc(searchedAgainFor.flat().join(", "))} and still found nothing.`
           : ""}</div>` +

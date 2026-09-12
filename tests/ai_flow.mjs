@@ -453,6 +453,44 @@ check("it says what it is waiting for", /Weighing \d+ candidates/.test(midFlight
   (midFlight[1] || "").slice(0, 160));
 check("and it is gone once there is an answer", !/state working/.test(out()), out().slice(0, 120));
 
+// === 16. the note belongs to the round that found something ===============
+// The model's own second round is shown `already_found`, so when it finds
+// nothing new its note says so -- "nothing here fits, the ones already found
+// cover this". Printed above picks the first round did find, that reads as the
+// whole search having failed, which is the commonest misreading of a
+// multi-round answer.
+store.set("kpi.tuning", JSON.stringify({ retries: 1 }));
+script = [
+  { kind: "expand", reply: { terms: ["sync", "highlights"], language: "English" } },
+  { kind: "weigh", reply: user => ({ ...takeFirst(84)(user),
+      note: "it syncs on a schedule, not instantly",
+      search_again: ["dropbox", "cloud"] }) },
+  { kind: "weigh", reply: { picks: [],
+      note: "no suitable result here; the ones already found cover this" } }
+];
+document.getElementById("aiQuestion").value = "sync my highlights between devices";
+await api.runAI();
+check("both rounds ran", script.length === 0, "left " + script.length);
+check("the first round's answer stands", ids().length === 1, ids().join());
+check("the barren round's note is not the answer's note",
+  !out().includes("no suitable result"), out().slice(0, 400));
+check("the note of the round that found something is kept",
+  out().includes("not instantly"), out().slice(0, 400));
+
+// And with nothing found at all it is the best explanation there is, so it is
+// the one thing that must still be said.
+script = [
+  { kind: "expand", reply: { terms: ["sync"], language: "English" } },
+  { kind: "weigh", reply: { picks: [], note: "no reading-time tracker is in here",
+      search_again: ["dropbox", "cloud"] } },
+  { kind: "weigh", reply: { picks: [], note: "still nothing that does this" } }
+];
+document.getElementById("aiQuestion").value = "how long until I finish this book";
+await api.runAI();
+check("an empty answer keeps the latest explanation",
+  out().includes("still nothing that does this"), out().slice(0, 400));
+store.set("kpi.tuning", JSON.stringify({ retries: 0 }));
+
 // Quiet when it passes, for the same reason parity_check.py is: a nightly log
 // nobody reads is a log that hides the one line that mattered.
 const failures = t.filter(line => line.startsWith("FAIL"));
