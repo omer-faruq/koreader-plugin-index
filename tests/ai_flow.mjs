@@ -120,7 +120,7 @@ async function fakeFetch(url, opts) {
 
 const api = new Function(
   "document", "window", "localStorage", "location", "history", "navigator", "fetch",
-  body + "\n; return { state, runAI, lookAgain, get session() { return aiSession; }, renderAnswer, $ };"
+  body + "\n; return { state, runAI, lookAgain, get session() { return aiSession; }, renderAnswer, compact, $ };"
 )(document, window, localStorage, location, history, navigator, fakeFetch);
 
 api.state.index = index;
@@ -490,6 +490,15 @@ await api.runAI();
 check("an empty answer keeps the latest explanation",
   out().includes("still nothing that does this"), out().slice(0, 400));
 store.set("kpi.tuning", JSON.stringify({ retries: 0 }));
+
+// The flag reaches the model by name only where it is true; the other nine
+// hundred candidates must not grow a field that says nothing.
+const listed = api.compact({ id: "a/b", purpose: "p", tier: "B", contrib: true });
+const unlisted = api.compact({ id: "c/d", purpose: "p", tier: "B" });
+check("contrib is named to the model", listed.listed_in_koreader_contrib === true,
+  JSON.stringify(listed));
+check("no contrib field where there is none", !("listed_in_koreader_contrib" in unlisted),
+  JSON.stringify(unlisted));
 
 // Quiet when it passes, for the same reason parity_check.py is: a nightly log
 // nobody reads is a log that hides the one line that mattered.

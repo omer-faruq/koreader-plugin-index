@@ -160,7 +160,97 @@ def a_seed_is_built_like_anything_else():
     assert "curated" not in entry["tier_reasons"], entry["tier_reasons"]
 
 
+# Both URL spellings the real file uses, a submodule hosted off GitHub, and a
+# repeat in another case.
+GITMODULES = """\
+[submodule "weather.koplugin"]
+\tpath = weather.koplugin
+\turl = git@github.com:roygbyte/weather.koplugin
+[submodule "crossword.koplugin"]
+\tpath = crossword.koplugin
+\turl = git@github.com:roygbyte/crossword.koplugin.git
+[submodule "gemini.koplugin"]
+\tpath = gemini.koplugin
+\turl = https://repo.or.cz/gemini.koplugin.git
+[submodule "comicmeta.koplugin"]
+\tpath = comicmeta.koplugin
+\turl = https://github.com/NightQuest/comicmeta.koplugin.git
+[submodule "again"]
+\tpath = again
+\turl = https://github.com/RoyGByte/Weather.koplugin/
+"""
+
+
+def gitmodules_both_spellings_github_only():
+    got = build.parse_gitmodules(GITMODULES)
+    assert got == ["roygbyte/weather.koplugin", "roygbyte/crossword.koplugin",
+                   "NightQuest/comicmeta.koplugin"], got
+
+
+def gitmodules_without_a_submodule_is_not_listed():
+    """.gitmodules can outlive the submodule it describes."""
+    got = build.parse_gitmodules(GITMODULES, linked={"weather.koplugin", "comicmeta.koplugin"})
+    assert got == ["roygbyte/weather.koplugin", "NightQuest/comicmeta.koplugin"], got
+
+
+class RenamingClient(StubClient):
+    """Answers an old name with the node of the repository it moved to."""
+
+    def __init__(self, known=(), moved=None):
+        super().__init__(known)
+        self.moved = moved or {}
+
+    def graphql(self, query, variables):
+        data = super().graphql(query, variables)
+        for i, owner, name in ALIAS.findall(query):
+            target = self.moved.get(f"{owner}/{name}")
+            if target:
+                data[f"r{i}"] = node(target)
+        return data
+
+
+def contrib_is_seeded_and_followed_through_a_rename():
+    old, new = "NightQuest/comicmeta.koplugin", "KORComic/comicmeta.koplugin"
+    client = RenamingClient([SEED], moved={old: new})
+    found = {}
+    resolved = build.add_seeds(client, seeds(SEED), found, contrib=[old, SEED])
+    assert client.calls == [[SEED, old]], "a name curation and contrib share is asked once"
+    assert set(found) == {SEED, new}, found
+    listed = build.contrib_ids([old, SEED], resolved)
+    assert listed == {new.lower(), SEED.lower()}, listed
+
+
+def contrib_already_found_in_another_case_is_not_fetched():
+    client, found = StubClient([]), {"Loeffner/WeatherLockscreen": node("Loeffner/WeatherLockscreen")}
+    resolved = build.add_seeds(client, {}, found, contrib=["loeffner/weatherlockscreen"])
+    assert client.calls == [] and resolved == {}, client.calls
+    listed = build.contrib_ids(["loeffner/weatherlockscreen"], resolved)
+    assert build.mark_contrib([{"id": "Loeffner/WeatherLockscreen"}], listed) == 1
+
+
+def contrib_flag_is_set_and_cleared():
+    """A plugin leaves the collection without pushing; its badge must go."""
+    kept, left = {"id": "a/kept", "contrib": True}, {"id": "b/left", "contrib": True}
+    fresh = {"id": "c/fresh"}
+    assert build.mark_contrib([kept, left, fresh], {"a/kept", "c/fresh"}) == 2
+    assert kept.get("contrib") is True and fresh.get("contrib") is True
+    assert "contrib" not in left, left
+
+
+def contrib_does_not_touch_the_tier():
+    entry, _, _ = build.build_plugin(node(SEED), build.load_curation())
+    before = (entry["tier"], list(entry["tier_reasons"]))
+    build.mark_contrib([entry], {SEED.lower()})
+    assert (entry["tier"], entry["tier_reasons"]) == before, entry
+
+
 CASES = [
+    ("gitmodules: both spellings, GitHub only, no repeats", gitmodules_both_spellings_github_only),
+    ("gitmodules without a submodule is not listed", gitmodules_without_a_submodule_is_not_listed),
+    ("contrib is seeded and followed through a rename", contrib_is_seeded_and_followed_through_a_rename),
+    ("contrib already found in another case is not fetched", contrib_already_found_in_another_case_is_not_fetched),
+    ("contrib flag is set and cleared", contrib_flag_is_set_and_cleared),
+    ("contrib does not touch the tier", contrib_does_not_touch_the_tier),
     ("one request for one seed", one_request_for_one_seed),
     ("already discovered is not fetched", already_discovered_is_not_fetched),
     ("batches of twenty, in order", batches_of_twenty),

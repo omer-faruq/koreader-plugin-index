@@ -80,6 +80,8 @@ def _plugin_block(entry, detailed):
         ]
         if entry.get("license"):
             facts.append(f"Licence: {entry['license']}")
+        if entry.get("contrib"):
+            facts.append("Listed in koreader/contrib")
         lines.append(" · ".join(facts))
         if entry.get("note"):
             lines.append("")
@@ -93,7 +95,8 @@ def _plugin_block(entry, detailed):
 
     purpose = entry.get("purpose") or entry.get("description") or "No description available."
     return (f"- **{entry['repo']}** — {purpose} "
-            f"({entry.get('activity', 'unknown')}, {entry.get('stars', 0)}★) "
+            f"({entry.get('activity', 'unknown')}, {entry.get('stars', 0)}★"
+            f"{', in koreader/contrib' if entry.get('contrib') else ''}) "
             f"<{entry['url']}>")
 
 

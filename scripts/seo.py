@@ -145,7 +145,9 @@ def _entry_html(entry, labels):
         f"★ {entry.get('stars', 0)}",
         _esc(entry.get("activity", "unknown")),
     ]
-    cats = [labels.get(c, c) for c in entry.get("categories") or []]
+    if entry.get("contrib"):
+        facts.append("listed in koreader/contrib")
+    cats =[labels.get(c, c) for c in entry.get("categories") or []]
     if cats:
         facts.append(_esc(", ".join(cats)))
     if entry.get("license"):

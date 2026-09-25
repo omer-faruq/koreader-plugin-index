@@ -11,10 +11,12 @@ that index doubles as the state file so nothing extra has to be persisted.
 """
 
 import argparse
+import base64
 import datetime
 import json
 import os
 import pathlib
+import re
 import sys
 import tomllib
 
@@ -62,6 +64,18 @@ PLUGIN_QUERIES = [
     'in:name ".koplugin"',
     'in:name ".koplugin" fork:only stars:>=1',
 ]
+
+# KOReader's own collection of community plugins, one git submodule each. A
+# KOReader maintainer merged every line of its .gitmodules, which is the one
+# piece of outside judgement this catalogue can read without inventing it. It
+# is a statement that the plugin worked when it was merged -- the collection's
+# README asks for exactly that and no more -- not a code review.
+CONTRIB_REPO = "koreader/contrib"
+GITMODULE_PATH = re.compile(r"^\s*path\s*=\s*(\S+)\s*$", re.MULTILINE)
+GITMODULE_URL = re.compile(
+    r"^\s*url\s*=\s*(?:git@github\.com:|(?:https?|git|ssh)://(?:git@)?github\.com/)"
+    r"([^/\s]+)/([^/\s]+?)(?:\.git)?/?\s*$",
+    re.MULTILINE | re.IGNORECASE)
 
 
 def now_iso():
@@ -439,8 +453,13 @@ def collect_patches(client, curation, since=None):
     return entries, touched_repos, len(repos)
 
 
-def collect_plugins(client, curation, since=None):
-    """Run every discovery query, de-duplicating by repository id."""
+def collect_plugins(client, curation, since=None, contrib=()):
+    """Run every discovery query, de-duplicating by repository id.
+
+    Returns the nodes, and what each fetched seed resolved to -- a renamed
+    repository answers under its new name, and the contrib flag has to follow
+    it there.
+    """
     found = {}
     for base in PLUGIN_QUERIES:
         query = base
@@ -448,12 +467,83 @@ def collect_plugins(client, curation, since=None):
             query += f" pushed:>{since}"
         for node in client.search(query):
             found[node["nameWithOwner"]] = node
-    add_seeds(client, curation, found)
+    resolved = add_seeds(client, curation, found, contrib)
     deepen_roots(client, found)
-    return found
+    return found, resolved
 
 
-def add_seeds(client, curation, found):
+def parse_gitmodules(text, linked=None):
+    """`owner/name` for every submodule hosted on GitHub, in file order.
+
+    Both spellings the file uses, `git@github.com:owner/name` and the https
+    form, with or without `.git`. Submodules hosted elsewhere -- two in
+    September 2026, on repo.or.cz and framagit -- have no place in an index
+    keyed by GitHub repository and are left out, as are the few plugins kept
+    inside koreader/contrib itself rather than linked from it.
+
+    `linked` is the set of paths the tree actually holds a submodule at. The
+    file alone is not enough: in September 2026 it still named three plugins
+    whose submodule was gone, and badging those would be the one claim here
+    that is simply false.
+    """
+    out, seen = [], set()
+    for section in re.split(r"^\s*\[submodule\b", text, flags=re.MULTILINE)[1:]:
+        path, url = GITMODULE_PATH.search(section), GITMODULE_URL.search(section)
+        if not url or (linked is not None and (not path or path.group(1) not in linked)):
+            continue
+        full = f"{url.group(1)}/{url.group(2)}"
+        if full.lower() not in seen:
+            seen.add(full.lower())
+            out.append(full)
+    return out
+
+
+def fetch_contrib(client):
+    """The GitHub repositories koreader/contrib links, or None if unreadable.
+
+    None rather than an empty list, so the caller can tell "the collection is
+    empty" from "the collection did not answer" -- only the second should
+    fall back on the previous run's flags. A file that parses to nothing is
+    treated as the second: the format changed, not the collection.
+
+    Two requests: .gitmodules for where each submodule points, and the root
+    tree for which of them are still there.
+    """
+    try:
+        blob = client.get_json(f"/repos/{CONTRIB_REPO}/contents/.gitmodules")
+        tree = client.get_json(f"/repos/{CONTRIB_REPO}/git/trees/HEAD")
+    except Exception:
+        return None
+    if not blob or not blob.get("content") or not tree or tree.get("truncated"):
+        return None
+    text = base64.b64decode(blob["content"]).decode("utf-8", "replace")
+    linked = {item["path"] for item in tree.get("tree", []) if item.get("type") == "commit"}
+    return parse_gitmodules(text, linked) or None
+
+
+def contrib_ids(contrib, resolved):
+    """Lower-cased ids of the contrib plugins, after following renames."""
+    return {resolved.get(full, full).lower() for full in contrib}
+
+
+def mark_contrib(entries, listed):
+    """Set `contrib` on the listed entries and clear it everywhere else.
+
+    Re-derived on every run, carried-over entries included: a plugin leaves
+    the collection without pushing anything, and its badge must go with it.
+    Absent rather than false, so the other nine hundred entries pay nothing.
+    """
+    count = 0
+    for entry in entries:
+        if entry["id"].lower() in listed:
+            entry["contrib"] = True
+            count += 1
+        else:
+            entry.pop("contrib", None)
+    return count
+
+
+def add_seeds(client, curation, found, contrib=()):
     """Add the repositories curation.toml names that no query reaches.
 
     Discovery is four queries: the `koreader-plugin` topic, or ".koplugin" in
@@ -473,9 +563,22 @@ def add_seeds(client, curation, found):
     `pushed:>since` can never select it, and without asking outright its stars,
     push date and README would freeze until the next full build. One batched
     request buys the whole list; a seed that has gone warns and is skipped.
+
+    Every plugin koreader/contrib links is a seed too, and for the same
+    reason: a KOReader maintainer naming a repository is judgement about where
+    to look, the same kind curation.toml holds. Most of them the queries find
+    anyway; the handful they cannot would otherwise be absent from a catalogue
+    that badges the rest. Those not found by this run's queries are fetched on
+    every run -- about a hundred of them on a diff night, five requests.
+
+    Returns what each fetched seed resolved to, keyed by the name asked for.
     """
-    wanted = []
-    for seed in curation.get("discovery", {}).get("extra_plugins", []):
+    named = list(curation.get("discovery", {}).get("extra_plugins", [])) + list(contrib)
+    # GitHub names are case-insensitive, and .gitmodules does not always
+    # spell a repository the way GitHub returns it.
+    have = {key.lower() for key in found}
+    wanted, asked = [], set()
+    for seed in named:
         owner, _, name = seed.partition("/")
         if not owner or not name:
             print(f"  seed '{seed}' is not owner/name, skipping")
@@ -483,19 +586,23 @@ def add_seeds(client, curation, found):
         # Already discovered: the author added the topic, or renamed the repo
         # to end in .koplugin. Nothing to fetch, and the curation.toml line can
         # go whenever someone notices.
-        if seed not in found:
+        if seed.lower() not in have and seed.lower() not in asked:
+            asked.add(seed.lower())
             wanted.append(seed)
     if not wanted:
-        return
+        return {}
 
     seeded = client.fetch_repos(wanted)
+    resolved = {}
     for seed in wanted:
         node = seeded.get(seed)
         if not node:
             print(f"  seed '{seed}' did not answer, skipping")
             continue
         found[node["nameWithOwner"]] = node
+        resolved[seed] = node["nameWithOwner"]
     print(f"  seeded {len(seeded)} of {len(wanted)} named")
+    return resolved
 
 
 def deepen_roots(client, nodes):
@@ -775,7 +882,10 @@ def main():
         print("full mode: enumerating everything")
 
     print("collecting plugins…")
-    nodes = collect_plugins(client, curation, since)
+    contrib = fetch_contrib(client)
+    if contrib is None:
+        print(f"  {CONTRIB_REPO} unreadable: keeping the previous run's contrib flags")
+    nodes, resolved = collect_plugins(client, curation, since, contrib or ())
     print(f"  {len(nodes)} repositories returned")
     attach_english_readmes(client, nodes)
 
@@ -823,6 +933,17 @@ def main():
             details.pop(entry["id"], None)
         if condensed:
             readmes[entry["id"]] = condensed
+
+    # A bad minute at the contents API must not strip every badge: the last
+    # published flags are a better answer than none.
+    if contrib is None:
+        listed = {e["id"].lower() for e in (previous or {}).get("plugins", [])
+                  if e.get("contrib")}
+    else:
+        listed = contrib_ids(contrib, resolved)
+    flagged = mark_contrib(entries.values(), listed)
+    if contrib is not None:
+        print(f"  {CONTRIB_REPO}: {len(contrib)} on GitHub, {flagged} in the index")
 
     plugins = sorted(entries.values(), key=lambda e: (-e["stars"], e["id"].lower()))
 

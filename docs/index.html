@@ -495,6 +495,8 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
    catalogue growing by a few plugins a week is worth returning to only if the
    new ones are findable. */
 .badge-new { color: var(--accent); border-color: var(--accent); font-weight: 600; }
+/* Someone else's judgement rather than ours, so it borrows no tier colour. */
+.badge-contrib { color: var(--accent); background: var(--accent-soft); border-color: var(--accent-soft); cursor: help; }
 .why { color: var(--muted); font-size: .8rem; margin-left: auto; }
 .why span { color: var(--accent); }
 
@@ -1523,6 +1525,9 @@ function compact(entry) {
   }
   // Named so the model can prefer an original over a copy of it.
   if (entry.is_fork) out.fork_of_another_project = true;
+  // Named so a reason can say it. `fit` stays how well a plugin answers the
+  // question, which the prompt already keeps apart from how well it is made.
+  if (entry.contrib) out.listed_in_koreader_contrib = true;
   return out;
 }
 
@@ -2679,6 +2684,12 @@ function setupListShareModal() {
 
 /* ------------------------------------------------------------------ render */
 
+// Says what being listed means and no more: koreader/contrib asks that a
+// plugin work when it is merged, and warns that it may break later.
+const CONTRIB_TITLE = "Listed in koreader/contrib: a KOReader maintainer accepted it "
+  + "into the official collection of community plugins. Not a code review, and it "
+  + "may stop working after a KOReader update.";
+
 function tierLabel(entry) {
   if (entry.tier === "A") return "curated";
   if (entry.tier === "B") return "community";
@@ -2712,6 +2723,7 @@ function card(entry, tokens, note, rawWords = []) {
     }</p>
     <div class="badges">
       <span class="badge tier-${esc(entry.tier)}">${esc(tierLabel(entry))}</span>
+      ${entry.contrib ? `<span class="badge badge-contrib" title="${esc(CONTRIB_TITLE)}">KOReader contrib</span>` : ""}
       ${(entry.tier_reasons || []).includes("settled")
         ? `<span class="badge badge-settled" title="No commits in over a year. Plenty of small plugins are simply finished, so this is shown rather than hidden.">no recent changes</span>`
         : ""}

@@ -647,6 +647,9 @@ say = "One word, three plugins: two for typing Chinese and one for reading it. P
 # The cheaper fix, per seed, is an issue on the repository asking its author to
 # add the `koreader-plugin` topic; when they do, the line here can go. This
 # list is for the gap in between, and for authors who never answer.
+#
+# Plugins linked from koreader/contrib need no line here: the build reads its
+# .gitmodules on every run and seeds all of them.
 
 [discovery]
 extra_plugins = [
