@@ -21,14 +21,10 @@ on:
         default: full
 
 # `contents: write` is for the monthly heartbeat commit below, nothing else.
-# `models: read` lets GITHUB_TOKEN call GitHub Models, which translates the few
-# READMEs that offer no English at all. Without it the build still runs; it
-# just translates nothing new.
 permissions:
   contents: write
   pages: write
   id-token: write
-  models: read
 
 # Never let a monthly full run and a daily diff publish over each other.
 concurrency:
@@ -63,6 +59,10 @@ jobs:
       - name: Build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # DeepSeek, for the few READMEs that offer no English at all. A
+          # prepaid balance, so it cannot spend past what was topped up.
+          # Missing or spent, the build still runs; it translates nothing new.
+          TRANSLATE_API_KEY: ${{ secrets.TRANSLATE_API_KEY }}
         run: python scripts/build.py --mode "${{ steps.mode.outputs.mode }}"
 
       - name: Quality tests

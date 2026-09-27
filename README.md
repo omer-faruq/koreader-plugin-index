@@ -51,14 +51,16 @@ reasoning happens on the consumer's side, with their own tools.
 
 One exception, fenced off in `scripts/translate.py`: a README with no English
 anywhere in it — no `README_en.md`, no English section — is machine-translated,
-at most thirty a run, most-starred first. It runs on GitHub Models through the
-workflow's own `GITHUB_TOKEN`, so there is still no key to keep. Each
+at most thirty a run, most-starred first. It runs on DeepSeek from a prepaid
+balance, with the key in the `TRANSLATE_API_KEY` secret; the balance is the
+spending cap, and without the key the build runs and translates nothing. Each
 translation is made once, reused until the README changes, dropped as soon as
 the author publishes English of their own, and labelled "no English README ·
 machine-translated" wherever it shows.
 
-Running cost is zero: Actions and Pages are free for public repositories, and
-`GITHUB_TOKEN` is provided by the workflow and never needs rotating.
+Running cost is zero apart from translation: Actions and Pages are free for
+public repositories, and `GITHUB_TOKEN` is provided by the workflow and never
+needs rotating. Translation costs cents a month from the DeepSeek balance.
 
 ## Layout
 

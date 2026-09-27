@@ -11,8 +11,11 @@ reachable from a test. The translator here is scripted, and build_plugin and
 attach_translations run directly against synthetic repositories, offline.
 """
 
+import http.server
+import json
 import pathlib
 import sys
+import threading
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "scripts"))
 
@@ -285,6 +288,91 @@ def a_long_readme_is_cut_and_says_so():
     expect(detail.get("readme_partial") is True, "the panel must say it shows the opening")
 
 
+class FakeService:
+    """A local endpoint that answers one scripted response per request and
+    keeps what it was sent -- translate() itself, over real HTTP, offline."""
+
+    def __init__(self, status=200, body=None):
+        self.status, self.body, self.seen = status, body, []
+        service = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length", 0))
+                service.seen.append((self.headers.get("Authorization"),
+                                     json.loads(self.rfile.read(length))))
+                raw = service.body if isinstance(service.body, bytes) else json.dumps(
+                    service.body).encode()
+                self.send_response(service.status)
+                self.end_headers()
+                self.wfile.write(raw)
+
+            def log_message(self, *args):
+                pass
+
+        self.server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        # The path carries "deepseek.com" so the DeepSeek-only field is sent.
+        self.url = f"http://127.0.0.1:{self.server.server_port}/api.deepseek.com/chat/completions"
+
+    def close(self):
+        self.server.shutdown()
+
+
+def completion(text):
+    return {"choices": [{"message": {"content": text}}]}
+
+
+def the_request_is_what_deepseek_expects():
+    service = FakeService(body=completion(ENGLISH))
+    try:
+        source, _ = translate.source_text(CHINESE)
+        got = translate.translate(source, "sk-test", endpoint=service.url)
+    finally:
+        service.close()
+    auth, sent = service.seen[0]
+    expect(got == ENGLISH.strip(), got)
+    expect(auth == "Bearer sk-test", auth)
+    expect(sent["thinking"] == {"type": "disabled"}, "thinking bills tokens and ignores temperature")
+    expect(sent["temperature"] == 0 and sent["model"] == translate.MODEL, sent)
+    expect(sent["messages"][1]["content"] == source, "the README text is what gets sent")
+
+
+def each_failure_is_sorted_by_what_it_means():
+    """Key, balance and rate limit fail every request after them too, so they
+    stop the run; a server error is one request's bad luck; a 200 that is not
+    a completion is an endpoint that has gone, as GitHub Models did."""
+    cases = [
+        (401, completion(""), translate.Unavailable),
+        (402, completion(""), translate.Unavailable),
+        (429, completion(""), translate.Unavailable),
+        (503, completion(""), ValueError),
+        (200, b"OK\r\n", translate.Unavailable),
+        (200, completion(CHINESE), translate.Refused),
+    ]
+    for status, body, wanted in cases:
+        service = FakeService(status, body)
+        try:
+            translate.translate("测试", "sk-test", endpoint=service.url)
+        except Exception as exc:  # noqa: BLE001
+            # Exact type: a server error that came back as Refused would be
+            # remembered and never asked again.
+            expect(type(exc) is wanted,
+                   f"{status}: {type(exc).__name__}, wanted {wanted.__name__}")
+        else:
+            raise AssertionError(f"{status}: nothing raised, wanted {wanted.__name__}")
+        finally:
+            service.close()
+
+
+def no_key_asks_nothing():
+    try:
+        translate.translate("测试", "")
+    except translate.Unavailable:
+        return
+    raise AssertionError("no key must be unavailable, not a request")
+
+
 CASES = [
     ("a Chinese README is translated and labelled", a_chinese_readme_is_translated_and_labelled),
     ("the author's English description stays the purpose", the_authors_english_description_stays_the_purpose),
@@ -303,6 +391,9 @@ CASES = [
     ("the cap goes to the most starred", the_cap_goes_to_the_most_starred),
     ("echoes and summaries are refused", echoes_and_summaries_are_refused),
     ("a long README is cut, and says so", a_long_readme_is_cut_and_says_so),
+    ("the request is what DeepSeek expects", the_request_is_what_deepseek_expects),
+    ("each failure is sorted by what it means", each_failure_is_sorted_by_what_it_means),
+    ("no key asks nothing", no_key_asks_nothing),
 ]
 
 

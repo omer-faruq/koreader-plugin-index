@@ -12,9 +12,15 @@ no English of its own, and everything built from it is marked as a machine
 translation wherever it is shown. The day the repository publishes a README_en,
 the translation stops being used.
 
-GitHub Models, through the workflow's own GITHUB_TOKEN: free at this volume,
-no key to store or rotate, which is the same bargain the rest of the pipeline
-made. Standard library only, like github.py.
+DeepSeek, on a prepaid balance kept in the TRANSLATE_API_KEY secret. This was
+built on GitHub Models first, for the sake of needing no key at all; that
+service was retired on 30 July 2026, and every provider left needs one. The
+prepaid balance is the reason for this one: it is a spending cap that cannot
+be misconfigured, since there is no card behind it to charge. It is also
+strong on Chinese, which is most of what arrives here, and its terms assign
+the output to the caller with no attribution asked. Any OpenAI-compatible
+endpoint works through TRANSLATE_ENDPOINT and TRANSLATE_MODEL. Standard
+library only, like github.py.
 """
 
 import hashlib
@@ -26,21 +32,20 @@ import urllib.request
 
 import extract
 
-ENDPOINT = os.environ.get("TRANSLATE_ENDPOINT",
-                          "https://models.github.ai/inference/chat/completions")
-MODEL = os.environ.get("TRANSLATE_MODEL", "openai/gpt-4.1-mini")
+ENDPOINT = os.environ.get("TRANSLATE_ENDPOINT", "https://api.deepseek.com/chat/completions")
+MODEL = os.environ.get("TRANSLATE_MODEL", "deepseek-flash")
 
 # Bumped when the prompt or the source preparation changes enough that every
 # stored translation should be redone. A model change alone does not bump it:
 # the old translation is still a translation of the same text.
 PROMPT_VERSION = 1
 
-# Chinese runs close to a token a character, and English comes back at roughly
-# one and a half times the tokens. The free tier's per-request limits are small
-# -- 8000 tokens in and 4000 out when this was written -- so this is sized for
-# the output side. It covers the opening, the feature list and usually the
-# install steps, which is what extraction reads.
-MAX_SOURCE_CHARS = 2400
+# The same length the README panel shows, so a translated excerpt covers what
+# an untranslated one would. Chinese runs close to a token a character and
+# English comes back at roughly one and a half times that, which MAX_TOKENS
+# leaves room for.
+MAX_SOURCE_CHARS = 4000
+MAX_TOKENS = 8192
 
 SYSTEM_PROMPT = (
     "You translate README files of KOReader plugins into English.\n"
@@ -107,7 +112,7 @@ def acceptable(source, translated):
     return words >= 8 and len(translated) >= len(source) * 0.4
 
 
-def translate(text, token, model=MODEL, endpoint=ENDPOINT, timeout=120):
+def translate(text, token, model=MODEL, endpoint=ENDPOINT, timeout=240):
     """English for `text`.
 
     Refused when the answer is not a translation, Unavailable for the failures
@@ -116,15 +121,21 @@ def translate(text, token, model=MODEL, endpoint=ENDPOINT, timeout=120):
     """
     if not token:
         raise Unavailable("no token")
-    body = json.dumps({
+    payload = {
         "model": model,
         "temperature": 0,
-        "max_tokens": 4000,
+        "max_tokens": MAX_TOKENS,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": text},
         ],
-    }).encode("utf-8")
+    }
+    # DeepSeek thinks by default, which bills reasoning tokens and ignores
+    # temperature -- neither wanted for a translation. Only sent there: other
+    # OpenAI-compatible endpoints may refuse a field they do not know.
+    if "deepseek.com" in endpoint:
+        payload["thinking"] = {"type": "disabled"}
+    body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(endpoint, data=body, headers={
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
@@ -135,9 +146,9 @@ def translate(text, token, model=MODEL, endpoint=ENDPOINT, timeout=120):
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
-        # 401/403: the workflow lacks `models: read`, or the token is not one
-        # GitHub Models accepts. 429: the day's quota is spent.
-        if exc.code in (401, 403, 429):
+        # 401/403: the key is wrong or revoked. 402: the prepaid balance is
+        # spent. 429: too many requests. None clears within a run.
+        if exc.code in (401, 402, 403, 429):
             raise Unavailable(f"HTTP {exc.code}") from exc
         raise ValueError(f"HTTP {exc.code}") from exc
     except (urllib.error.URLError, TimeoutError) as exc:
@@ -146,7 +157,8 @@ def translate(text, token, model=MODEL, endpoint=ENDPOINT, timeout=120):
     try:
         answer = json.loads(raw)["choices"][0]["message"]["content"]
     except (ValueError, KeyError, IndexError, TypeError) as exc:
-        # A filtering proxy answers 200 with "OK" and no JSON. Every request
+        # 200 with no JSON is a retired or misrouted endpoint -- GitHub
+        # Models answered a plain "OK" after it was shut down. Every request
         # after this one will get the same, so it is treated as unavailable.
         raise Unavailable(f"not a completion: {raw[:60]!r}") from exc
     answer = (answer or "").strip()

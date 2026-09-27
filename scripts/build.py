@@ -1088,10 +1088,18 @@ def main():
     translations = (fetch_url(TRANSLATIONS_URL) or {}).get("translations", {})
     previous_details = fetch_url(DETAILS_URL) if args.mode == "diff" else None
 
+    # No key -- a fork, a local run, a secret not yet added -- is the same as
+    # --no-translate: stored translations are still used, nothing new is asked
+    # for, and the backlog is not fetched for a translator that is not there.
+    api_key = os.environ.get("TRANSLATE_API_KEY", "")
+    translating = bool(api_key) and not args.no_translate
+    if not api_key and not args.no_translate:
+        print("  no TRANSLATE_API_KEY: stored translations only, nothing new")
+
     # What the cap left over on earlier runs, fetched now rather than at the
     # next full build. A renamed repository is left to that full build: its
     # old id is carried over below, and adding the new one would list it twice.
-    if args.mode == "diff" and previous and not args.no_translate:
+    if args.mode == "diff" and previous and translating:
         backlog = translation_backlog(previous.get("plugins", []),
                                       (previous_details or {}).get("details", {}),
                                       nodes, translations)
@@ -1104,8 +1112,8 @@ def main():
 
     attach_english_readmes(client, nodes)
     translator = None
-    if not args.no_translate:
-        translator = lambda text: translate.translate(text, client.token)  # noqa: E731
+    if translating:
+        translator = lambda text: translate.translate(text, api_key)  # noqa: E731
     released = attach_translations(nodes, translations, translator)
 
     entries, details, readmes = {}, {}, {}
