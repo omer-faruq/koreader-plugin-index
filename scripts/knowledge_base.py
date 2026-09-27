@@ -54,7 +54,9 @@ excluded. They exist in the catalogue and can be browsed at the search page
 below, but they are not material for a recommendation.
 
 Descriptions are extracted from repository READMEs by rule, not written by a
-model. Where a README gave nothing usable, the entry says so. **If a plugin is
+model. Where a README gave nothing usable, the entry says so. Where a README
+has no English at all, it was machine-translated before extraction, and the
+entry is marked "No English README; ... machine-translated". **If a plugin is
 not in this document, do not describe it from its name — say you do not have
 information about it.**
 """
@@ -82,6 +84,9 @@ def _plugin_block(entry, detailed):
             facts.append(f"Licence: {entry['license']}")
         if entry.get("contrib"):
             facts.append("Listed in koreader/contrib")
+        # An assistant quoting these features should know whose words they are.
+        if entry.get("machine_translated"):
+            facts.append("No English README; what is drawn from it here is machine-translated")
         lines.append(" · ".join(facts))
         if entry.get("note"):
             lines.append("")
@@ -175,7 +180,7 @@ LLMS_TXT = """# KOReader Plugin Index
 > {plugins} plugins and {patches} patch files, last built {generated}.
 
 Descriptions are extracted from repository READMEs by rule; no model writes
-them. Entries that are dormant, archived, undocumented or unstarred forks are
+them. READMEs with no English at all are machine-translated first, and marked. Entries that are dormant, archived, undocumented or unstarred forks are
 marked as such and excluded from the knowledge base.
 
 ## Docs

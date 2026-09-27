@@ -147,6 +147,8 @@ def _entry_html(entry, labels):
     ]
     if entry.get("contrib"):
         facts.append("listed in koreader/contrib")
+    if entry.get("machine_translated"):
+        facts.append("no English README; what is drawn from it is machine-translated")
     cats =[labels.get(c, c) for c in entry.get("categories") or []]
     if cats:
         facts.append(_esc(", ".join(cats)))
@@ -209,7 +211,8 @@ def _json_ld(index, patches, base, source):
                 "description": (
                     "Structured index of community KOReader plugins and user patches. "
                     "Descriptions, keywords, categories and activity are extracted from "
-                    "repository READMEs by rule; no model writes them."
+                    "repository READMEs by rule; no model writes them. READMEs with "
+                    "no English at all are machine-translated first, and labelled."
                 ),
                 "url": f"{base}/",
                 "dateModified": generated,
@@ -343,7 +346,9 @@ def render_catalogue(index, patches, base, source, appstore):
     below. Dormant, archived, undocumented and unstarred forks are left out; they are
     still browsable in the <a href="./">finder</a>.</p>
   <p>Descriptions are extracted from each repository's own README by rule. No model
-    writes them, and no entry here is an endorsement — every one carries its status.</p>
+    writes them, and no entry here is an endorsement — every one carries its status.
+    Where a README has no English at all, it is machine-translated before extraction,
+    and the entry says so.</p>
   <p class="toc-head">Categories
     <span class="exp" title="Assigned by keyword rules, not by a person">experimental</span>
     — each plugin is filed under the one heading that describes it best. The rules

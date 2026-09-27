@@ -25,6 +25,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent))
 import extract  # noqa: E402
 import knowledge_base  # noqa: E402
 import seo  # noqa: E402
+import translate  # noqa: E402
 from github import Client, fetch_url  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -37,6 +38,7 @@ PUBLISHED_INDEX = "https://omer-faruq.github.io/koreader-plugin-index/index.json
 READMES_URL = "https://omer-faruq.github.io/koreader-plugin-index/readme-index.json"
 DETAILS_URL = "https://omer-faruq.github.io/koreader-plugin-index/details.json"
 PATCHES_URL = "https://omer-faruq.github.io/koreader-plugin-index/patches.json"
+TRANSLATIONS_URL = "https://omer-faruq.github.io/koreader-plugin-index/translations.json"
 PAGES_BASE = "https://omer-faruq.github.io/koreader-plugin-index"
 APPSTORE_URL = "https://omer-faruq.github.io/appstore.koplugin/"
 
@@ -152,7 +154,10 @@ def attach_english_readmes(client, nodes):
     wanted = []
     for node in nodes.values():
         readme, _ = readme_of(node)
-        if not readme or extract.cjk_ratio(readme) < extract.CJK_DOMINANT:
+        # Any script the scorer cannot read, not just Chinese: a Russian README
+        # with a README_en beside it would otherwise go to machine translation
+        # while the author's own translation sat unread.
+        if not readme or not extract.foreign_script(readme):
             continue
         entries = (node.get("root") or {}).get("entries") or []
         name = extract.english_readme_name(
@@ -171,6 +176,160 @@ def attach_english_readmes(client, nodes):
             node["readmeEnglish"] = blob["text"]
             node["readmeEnglishName"] = name
             print(f"    {node['nameWithOwner']}: {name}")
+
+
+# New translations per run, most-starred first, and the only limit there is.
+# No star threshold: an unstarred plugin documented in Chinese is exactly the
+# one no English search can otherwise reach, and the order already puts the
+# quota where readers are. The backlog in September 2026 was about a hundred,
+# so a few nights clear it; after that a night sees one or two.
+TRANSLATE_PER_RUN = 30
+
+
+def needs_translation(node):
+    """Whether this repository offers no English an English query could read.
+
+    Asked of the English view rather than the README, so everything the
+    repository says in English itself -- a README_en beside it, an English
+    section inside it -- comes first, and a translation is only ever the last
+    resort. That is also what retires one: the run after an author adds
+    README_en.md, this answers no and the translation is let go.
+
+    GitHub's one-line description does not count. It is kept as the purpose
+    when it is English, but it is not the README, and the panel that shows the
+    README would still have nothing to show.
+    """
+    readme, _ = readme_of(node)
+    if not readme:
+        return False
+    view = extract.english_view(readme, node.get("readmeEnglish", ""))
+    return extract.foreign_script(view)
+
+
+def translation_backlog(previous, details, have, cache, limit=TRANSLATE_PER_RUN):
+    """Carried-over plugins still waiting for a translation, most-starred first.
+
+    A diff run only rebuilds what was pushed in the last day or two, so without
+    this whatever the cap left over would wait for the next monthly full run --
+    a hundred-repository backlog at thirty a run would take a season. These
+    are fetched by name and rebuilt like any other node.
+
+    Judged from the published excerpt, since the README itself is not in hand:
+    the excerpt is the cleaned README, and where it is still in another script
+    with no English section and no README_en behind it, so is the document.
+    One the model refused is left out until its README changes -- asking again
+    every night would get the same answer and hold a slot doing it.
+    """
+    pending = []
+    for old in previous:
+        pid = old["id"]
+        if pid in have or old.get("machine_translated") or (cache.get(pid) or {}).get("refused"):
+            continue
+        detail = details.get(pid) or {}
+        excerpt = detail.get("readme_excerpt") or ""
+        if not excerpt or detail.get("readme_source"):
+            continue
+        if extract.foreign_script(extract.english_view(excerpt)):
+            pending.append(old)
+    pending.sort(key=lambda e: (-e.get("stars", 0), e["id"].lower()))
+    return [e["id"] for e in pending[:limit]]
+
+
+def attach_translations(nodes, cache, translator=None, limit=TRANSLATE_PER_RUN,
+                        model=translate.MODEL):
+    """Give every repository that needs one a translation, reusing what it can.
+
+    `cache` is the previous run's translations.json, keyed by id, and is
+    updated in place. A stored translation is reused as long as the text it
+    was made from is unchanged; only a new or edited README costs a request,
+    so a full rebuild asks for nothing it already has.
+
+    `translator` takes source text and returns English. None means no
+    translating this run -- a stored translation is still used, since it is
+    already paid for. A translator that raises Unavailable is dropped for the
+    rest of the run. Refused is remembered against the text, and not asked
+    again until the README changes. Any other exception loses only that
+    repository, which the next run will ask for again, until three in a row
+    drop the translator too. Nothing a translator raises reaches the caller.
+
+    Returns the ids this run rebuilt and found no longer need a translation,
+    so the caller can drop them from what it publishes.
+    """
+    released, wanted = set(), []
+    for key, node in nodes.items():
+        if needs_translation(node):
+            wanted.append(node)
+        elif key in cache:
+            released.add(key)
+    # Most-read first, so a cap or a spent quota costs the long tail.
+    wanted.sort(key=lambda n: -n.get("stargazerCount", 0))
+
+    reused = fresh = waiting = refused = asked = failed_in_row = 0
+    for node in wanted:
+        key = node["nameWithOwner"]
+        text, partial = translate.source_text(readme_of(node)[0])
+        digest = translate.source_key(text)
+        held = cache.get(key)
+        if held and held.get("source_sha") == digest and held.get("refused"):
+            refused += 1
+            continue
+        if not (held and held.get("source_sha") == digest):
+            # The cap counts requests, refused ones included: it is there to
+            # bound what a run spends, not what it gets back.
+            if translator is None or asked >= limit:
+                waiting += 1
+                continue
+            asked += 1
+            try:
+                english = translator(text)
+            except translate.Unavailable as exc:
+                print(f"  translation unavailable ({exc}); stopping for this run")
+                translator = None
+                waiting += 1
+                continue
+            # The model answered, and the answer was not a translation. At
+            # temperature zero the same text gets the same answer, so it is
+            # remembered and not asked again until the README changes. Not a
+            # sign the service is down, so it does not count towards stopping.
+            except translate.Refused as exc:
+                print(f"    {key}: refused ({exc})")
+                cache[key] = {"source_sha": digest, "refused": True,
+                              "model": model, "refused_at": now_iso()}
+                refused += 1
+                failed_in_row = 0
+                continue
+            # Anything else at all -- a server error, a timeout, a dropped
+            # connection, an error type nobody anticipated. A translation is
+            # never worth a build, so none of it may escape this loop. Three in
+            # a row reads as a service that is down rather than one bad answer,
+            # and each can be a two-minute timeout, so the run stops asking.
+            except Exception as exc:  # noqa: BLE001
+                print(f"    {key}: not translated ({exc})")
+                waiting += 1
+                failed_in_row += 1
+                if failed_in_row >= 3:
+                    print("  three translations failed in a row; stopping for this run")
+                    translator = None
+                continue
+            failed_in_row = 0
+            held = cache[key] = {
+                "source_sha": digest,
+                "text": english,
+                "partial": partial,
+                "model": model,
+                "translated_at": now_iso(),
+            }
+            fresh += 1
+            print(f"    {key}: translated")
+        else:
+            reused += 1
+        node["readmeTranslated"] = held
+
+    if wanted or released:
+        print(f"  {len(wanted)} READMEs have no English: {reused} translations reused, "
+              f"{fresh} new, {refused} refused, {waiting} waiting; "
+              f"{len(released)} no longer needed")
+    return released
 
 
 # What KOReader itself loads. `pluginloader.lua` discovers directories whose
@@ -235,6 +394,12 @@ def build_plugin(node, curation):
     # follows the same rule with one boundary of its own, explained there.
     sidecar = node.get("readmeEnglish", "")
     source = extract.english_view(readme, sidecar)
+
+    # Last of all, a machine translation -- attached only where the view above
+    # found no English, so it can never displace the repository's own.
+    translation = (node.get("readmeTranslated") or {}).get("text") or ""
+    if translation:
+        source = translation
     features = extract.extract_features(source)
 
     # Filtering can leave less than it found. A bilingual README whose English
@@ -252,6 +417,7 @@ def build_plugin(node, curation):
     # left with no purpose at all from seven to none.
     purpose_from_source = (extract.extract_purpose(source)
                            or extract.extract_purpose(readme))
+    translated = bool(translation) and source is translation
 
     topics = [t["topic"]["name"] for t in node["repositoryTopics"]["nodes"]]
     headings = extract.extract_headings(source)
@@ -279,10 +445,14 @@ def build_plugin(node, curation):
     # in that state, several of them with a description better than anything
     # extraction could have produced: "Turn your KOReader device into a file
     # server (HTTP + WebDAV + FTP)".
+    #
+    # The same holds against a machine translation: the author's own English
+    # sentence beats a model's rendering of their Chinese one, and the
+    # translation still supplies the features, keywords and README panel.
     purpose = purpose_from_source
-    if (extract.cjk_ratio(purpose) >= extract.CJK_DOMINANT
+    if ((translated or extract.cjk_ratio(purpose) >= extract.CJK_DOMINANT)
             and description
-            and extract.cjk_ratio(description) < extract.CJK_DOMINANT):
+            and not extract.foreign_script(description)):
         purpose = description
 
     entry = {
@@ -328,6 +498,11 @@ def build_plugin(node, curation):
         "detail": None,
     }
     entry["activity"] = extract.activity_of(entry["pushed_at"], entry["archived"])
+    # Absent rather than false, like `contrib`. Says the repository offers no
+    # English of its own and what is shown here was machine-translated -- the
+    # reader is owed both halves of that.
+    if translated:
+        entry["machine_translated"] = True
 
     curated = curation["plugins"].get(entry["id"], {})
     entry = apply_curation(entry, curated)
@@ -341,10 +516,23 @@ def build_plugin(node, curation):
     # *sections* of a bilingual README are a different matter: they are
     # fragments, and fragments presented as "the README" are worse than the
     # document, so those still show the original.
+    #
+    # A machine translation is shown for the same reason the author's own is,
+    # and flagged so the panel can say so, and say when it covers only the
+    # opening of a longer document.
     excerpt_source = readme
     excerpt_name = None
     if sidecar and source is sidecar:
         excerpt_source, excerpt_name = sidecar, node.get("readmeEnglishName")
+    elif translated:
+        excerpt_source = translation
+    flags = {}
+    if excerpt_name:
+        flags["readme_source"] = excerpt_name
+    if translated:
+        flags["readme_translated"] = True
+        if node["readmeTranslated"].get("partial"):
+            flags["readme_partial"] = True
 
     detail = None
     if readme:
@@ -352,7 +540,7 @@ def build_plugin(node, curation):
             "id": entry["id"],
             "headings": headings,
             "readme_excerpt": extract.clean_markdown(excerpt_source)[:4000],
-            **({"readme_source": excerpt_name} if excerpt_name else {}),
+            **flags,
         }
         entry["detail"] = f"detail/{entry['owner']}__{entry['repo']}.json"
     return entry, detail, extract.condense_readme(source)
@@ -757,6 +945,9 @@ def coverage_of(plugins):
         # Fewer than three keywords is not enough surface to be found by
         # anything but the plugin's own name.
         "thin_keywords": sum(1 for e in plugins if len(e.get("keywords") or []) < 3),
+        # Counted inside `english`, and named apart so that number cannot
+        # quietly come to mean "English because a model said so".
+        "machine_translated": sum(1 for e in plugins if e.get("machine_translated")),
         "english_share": round(counts["english"] / total, 4),
     }
 
@@ -764,7 +955,8 @@ def coverage_of(plugins):
 def report_coverage(coverage):
     total = coverage["plugins"] or 1
     print(f"  reachable in English: {coverage['english']} "
-          f"({coverage['english'] / total:.1%})")
+          f"({coverage['english'] / total:.1%}), "
+          f"{coverage['machine_translated']} of them by machine translation")
     print(f"  documented but unreadable: {coverage['unreadable']} "
           f"({coverage['unreadable'] / total:.1%})")
     print(f"  no prose at all: {coverage['silent']} "
@@ -850,6 +1042,8 @@ def main():
     parser.add_argument("--max-diff-days", type=int, default=14,
                         help="a gap wider than this is rebuilt in full instead")
     parser.add_argument("--out", default=str(DOCS))
+    parser.add_argument("--no-translate", action="store_true",
+                        help="ask for no new translations; stored ones are still used")
     args = parser.parse_args()
 
     out_dir = pathlib.Path(args.out)
@@ -887,7 +1081,32 @@ def main():
         print(f"  {CONTRIB_REPO} unreadable: keeping the previous run's contrib flags")
     nodes, resolved = collect_plugins(client, curation, since, contrib or ())
     print(f"  {len(nodes)} repositories returned")
+
+    # Fetched on full runs too, unlike the carried files below: a translation
+    # is the one thing a full rebuild cannot get back for free, and without
+    # this the monthly run would pay for every one of them again.
+    translations = (fetch_url(TRANSLATIONS_URL) or {}).get("translations", {})
+    previous_details = fetch_url(DETAILS_URL) if args.mode == "diff" else None
+
+    # What the cap left over on earlier runs, fetched now rather than at the
+    # next full build. A renamed repository is left to that full build: its
+    # old id is carried over below, and adding the new one would list it twice.
+    if args.mode == "diff" and previous and not args.no_translate:
+        backlog = translation_backlog(previous.get("plugins", []),
+                                      (previous_details or {}).get("details", {}),
+                                      nodes, translations)
+        if backlog:
+            fetched = {pid: node for pid, node in client.fetch_repos(backlog).items()
+                       if node["nameWithOwner"] == pid}
+            deepen_roots(client, fetched)
+            nodes.update(fetched)
+            print(f"  translation backlog: {len(fetched)} of {len(backlog)} fetched")
+
     attach_english_readmes(client, nodes)
+    translator = None
+    if not args.no_translate:
+        translator = lambda text: translate.translate(text, client.token)  # noqa: E731
+    released = attach_translations(nodes, translations, translator)
 
     entries, details, readmes = {}, {}, {}
 
@@ -903,7 +1122,6 @@ def main():
     if args.mode == "diff":
         previous_readmes = fetch_url(READMES_URL) or {}
         readmes.update(previous_readmes.get("readmes", {}))
-        previous_details = fetch_url(DETAILS_URL)
         if previous_details:
             details.update(previous_details.get("details", {}))
         else:
@@ -1012,6 +1230,17 @@ def main():
         "readmes": live,
     })
 
+    # State for the next run, not read by the page. Everything live is kept,
+    # carried-over entries included, except what this run rebuilt and found an
+    # English README for -- that translation has been retired, not mislaid.
+    live_translations = {pid: t for pid, t in translations.items()
+                         if pid in entries and pid not in released}
+    translations_size = write_json(out_dir / "translations.json", {
+        "schema": SCHEMA_VERSION,
+        "generated_at": started,
+        "translations": live_translations,
+    })
+
     # The third consumer: a document for assistants, and a pointer file for
     # crawlers. Both are generated, so neither can go stale the way the
     # hand-written knowledge base did.
@@ -1066,6 +1295,7 @@ def main():
     print(f"  tiers     " + "  ".join(f"{k}:{v}" for k, v in sorted(tiers.items())))
     print(f"  misc-only {misc} ({misc*100//max(len(plugins),1)}%)")
     print(f"  details   {len(live_details)} ({details_size/1024:.0f} KB carried as details.json)")
+    print(f"  translations {len(live_translations)} ({translations_size/1024:.0f} KB)")
     ptiers = {}
     for entry in patches:
         ptiers[entry["tier"]] = ptiers.get(entry["tier"], 0) + 1

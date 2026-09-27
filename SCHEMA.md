@@ -21,6 +21,7 @@ scripts/build.py  ──►  index.json  ──►  docs/index.html      (search
 | `docs/detail/<owner>__<repo>.json` | search page, on demand | README-derived long text. |
 | `docs/details.json` | the next build | Every detail document in one file. A diff run carries these over; it cannot fetch 750 separate files. |
 | `docs/readme-index.json` | search page, opt-in | Condensed README text per plugin, for deep search. ~1 MB, lazily loaded. |
+| `docs/translations.json` | the next build | Machine translations by id, each with the hash of the text it was made from. Read on full runs too, so a rebuild reuses them instead of paying again. |
 | `docs/index.min.json` | device (Lua) | Reserved for phase 6. Same entry shape, fewer fields. |
 | `docs/knowledge-base.md` | LLM | Generated prose, not consumed by code. |
 | `docs/llms.txt` | crawlers | Pointer file. |
@@ -37,7 +38,7 @@ version bump. `schema` increments only on a removal or a meaning change.
   "source_repo": "https://github.com/omer-faruq/koreader-plugin-index",
   "counts": { "plugins": 739, "patches": 612, "patch_repos": 122 },
   "coverage": { "plugins": 752, "english": 696, "unreadable": 38, "silent": 18,
-                "thin_keywords": 34, "english_share": 0.9255 },
+                "thin_keywords": 34, "machine_translated": 21, "english_share": 0.9255 },
   "categories": [
     { "id": "sync", "label": "Sync", "count": 24 }
   ],
@@ -51,6 +52,9 @@ tokenises on `[a-z0-9]+`, so an entry whose only prose is in another script
 scores zero against every query — a failure that looks, from the outside,
 exactly like a search with no answer. `english` is reachable, `unreadable` is
 documented in a script the scorer cannot read, `silent` has no prose at all.
+`machine_translated` is the part of `english` that is reachable only through a
+machine translation, named apart so the headline number cannot quietly come to
+mean "English because a model said so".
 The quality suite refuses to publish a run where these collapse.
 
 `generated_at` is what the page shows as *"Index: 15 Aug 2026"*. Consumers must
@@ -108,8 +112,9 @@ The unit is a **repository**.
 | `purpose` | First meaningful README paragraph, trimmed. Empty string when the README gives nothing usable — never invented. Read from the English view of the README rather than the file itself: a `README_en.md` beside it, or the English sections of a bilingual document. Where that leaves a Chinese sentence and GitHub's own description is in English, the description is used instead — every consumer reads `purpose or description` and stops at the first, so the better line would otherwise never be seen. |
 | `keywords` | Match surface for search. Union of topics, description words, and README headings, after stop-word removal. For a plugin documented in another script, the `[glossary]` table in `curation.toml` adds English labels for the concepts its opening prose and headings name — labels, never prose, and never a `purpose`. |
 | `has_plugin_files` | `main.lua`, `_meta.lua` or a `*.koplugin` directory, at the repo root or one level below it. The single strongest "this is a real KOReader plugin" signal. KOReader loads `main.lua`; `_meta.lua` is optional metadata, so requiring it — as this field did while it was named `has_meta` — demoted real plugins. |
+| `machine_translated` | `true` when the repository offers no English README — no `README_en.md` beside it, no English section inside it — and its README was machine-translated to produce `features`, `keywords` and the README excerpt; absent otherwise. At most thirty new translations a run, most-starred first; a diff run also fetches the ones earlier runs left waiting. An English GitHub description is still preferred as `purpose` over a translated paragraph. Every consumer that shows the entry must say both halves: no English README, and machine-translated. |
 | `contrib` | `true` when [koreader/contrib](https://github.com/koreader/contrib) links the repository as a submodule, following renames; absent otherwise. A KOReader maintainer merged it and the collection asks that it worked then — not a code review, and it does not affect `tier` or ranking. Every contrib submodule on GitHub is also a discovery seed, so one the queries miss is still indexed. |
-| `detail` | Relative path, or `null` when there is nothing beyond what is inlined here. The detail document carries `readme_excerpt`, and `readme_source` naming the file it came from when that was not `README.md` — a repository documenting itself in another script gets its own published translation shown, since this page is read in English. |
+| `detail` | Relative path, or `null` when there is nothing beyond what is inlined here. The detail document carries `readme_excerpt`, and `readme_source` naming the file it came from when that was not `README.md` — a repository documenting itself in another script gets its own published translation shown, since this page is read in English. `readme_translated: true` marks an excerpt that is a machine translation, and `readme_partial: true` one that covers only the opening of a longer README. |
 
 ## Patch entry
 

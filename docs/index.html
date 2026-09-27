@@ -497,6 +497,8 @@ h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -.02em; }
 .badge-new { color: var(--accent); border-color: var(--accent); font-weight: 600; }
 /* Someone else's judgement rather than ours, so it borrows no tier colour. */
 .badge-contrib { color: var(--accent); background: var(--accent-soft); border-color: var(--accent-soft); cursor: help; }
+/* A fact about the text on the card, not about the plugin, so no colour. */
+.badge-translated { border-style: dashed; cursor: help; }
 .why { color: var(--muted); font-size: .8rem; margin-left: auto; }
 .why span { color: var(--accent); }
 
@@ -2690,6 +2692,13 @@ const CONTRIB_TITLE = "Listed in koreader/contrib: a KOReader maintainer accepte
   + "into the official collection of community plugins. Not a code review, and it "
   + "may stop working after a KOReader update.";
 
+// Both halves, because either alone misleads: "machine-translated" reads as a
+// choice this site made over an English README, and "no English README" leaves
+// the reader wondering where the English on the card came from.
+const TRANSLATED_TITLE = "This repository has no English README. The README excerpt, "
+  + "features and search keywords here were machine-translated from the original, "
+  + "which is on GitHub.";
+
 function tierLabel(entry) {
   if (entry.tier === "A") return "curated";
   if (entry.tier === "B") return "community";
@@ -2724,6 +2733,7 @@ function card(entry, tokens, note, rawWords = []) {
     <div class="badges">
       <span class="badge tier-${esc(entry.tier)}">${esc(tierLabel(entry))}</span>
       ${entry.contrib ? `<span class="badge badge-contrib" title="${esc(CONTRIB_TITLE)}">KOReader contrib</span>` : ""}
+      ${entry.machine_translated ? `<span class="badge badge-translated" title="${esc(TRANSLATED_TITLE)}">no English README · machine-translated</span>` : ""}
       ${(entry.tier_reasons || []).includes("settled")
         ? `<span class="badge badge-settled" title="No commits in over a year. Plenty of small plugins are simply finished, so this is shown rather than hidden.">no recent changes</span>`
         : ""}
@@ -2999,8 +3009,14 @@ function bindReadme(root, entries) {
         // translation shown here, because this page is read in English -- but
         // the panel says which file that was, so following the link to a
         // different-looking document is not a surprise.
-        const from = detail.readme_source
-          ? `${esc(detail.readme_source)} excerpt` : "README excerpt";
+        //
+        // A machine translation says so first, before anything else in the
+        // panel: the reader is about to take these sentences as the author's.
+        const from = detail.readme_translated
+          ? `No English README in this repository. Machine translation of ${
+              detail.readme_partial ? "its opening" : "the README"}`
+          : detail.readme_source
+            ? `${esc(detail.readme_source)} excerpt` : "README excerpt";
         panel.innerHTML =
           `<div class="head">${from} — see GitHub for the full document</div>` +
           esc(text || "This repository's README had no readable prose.");

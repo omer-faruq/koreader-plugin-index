@@ -45,9 +45,17 @@ docs/index.json  ──►  search page      (this repo's GitHub Pages)
                  ──►  catalogue.html   for readers and crawlers without JS
 ```
 
-No model runs in the pipeline. Every field is extracted by rule, which is what
-keeps rebuilds free, reproducible, and free of an API key that would eventually
-expire. The reasoning happens on the consumer's side, with their own tools.
+Every field is extracted by rule, which is what keeps rebuilds free,
+reproducible, and free of an API key that would eventually expire. The
+reasoning happens on the consumer's side, with their own tools.
+
+One exception, fenced off in `scripts/translate.py`: a README with no English
+anywhere in it — no `README_en.md`, no English section — is machine-translated,
+at most thirty a run, most-starred first. It runs on GitHub Models through the
+workflow's own `GITHUB_TOKEN`, so there is still no key to keep. Each
+translation is made once, reused until the README changes, dropped as soon as
+the author publishes English of their own, and labelled "no English README ·
+machine-translated" wherever it shows.
 
 Running cost is zero: Actions and Pages are free for public repositories, and
 `GITHUB_TOKEN` is provided by the workflow and never needs rotating.
@@ -59,6 +67,7 @@ Running cost is zero: Actions and Pages are free for public repositories, and
 | `scripts/build.py` | Builds the index. `--mode diff` (daily) or `full` (monthly). |
 | `scripts/github.py` | GitHub client. Standard library only. |
 | `scripts/extract.py` | README → purpose, keywords, categories, tier. |
+| `scripts/translate.py` | Machine translation for READMEs that offer no English. The only model call in the build. |
 | `scripts/rank.py` | Reference ranking. The search page mirrors these rules. |
 | `scripts/seo.py` | `catalogue.html`, `robots.txt`, `sitemap.xml` — the catalogue for anything that does not run JavaScript. |
 | `curation.toml` | **The only hand-written file.** |

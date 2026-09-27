@@ -74,6 +74,31 @@ def cjk_ratio(text):
     return han / (han + latin) if han + latin else 0.0
 
 
+# Alphabets rather than ideographs: Greek, Cyrillic, Hebrew, Arabic, Devanagari,
+# Thai. The scorer reads none of them either, but they are counted apart from
+# CJK because a letter here weighs what a Latin letter weighs, not what a word
+# does -- one Russian name in an English sentence would cross 0.15 on its own.
+OTHER_SCRIPT_RE = re.compile(
+    "[\u0370-\u03ff\u0400-\u052f\u0590-\u05ff\u0600-\u06ff\u0900-\u097f\u0e00-\u0e7f]")
+OTHER_SCRIPT_DOMINANT = 0.5
+
+
+def foreign_script(text):
+    """Whether no English query can read this text at all.
+
+    Wider than cjk_ratio, which the extraction rules are tuned on and keep
+    using: this only decides whether a README is worth sending to translation
+    and whether what comes back is English. A German or Spanish README is out
+    of its reach -- the scorer at least tokenises those, and telling them from
+    English takes a language model, which is what this is trying not to spend.
+    """
+    if cjk_ratio(text) >= CJK_DOMINANT:
+        return True
+    other = len(OTHER_SCRIPT_RE.findall(text or ""))
+    latin = len(LATIN_RE.findall(text or ""))
+    return bool(other) and other / (other + latin) >= OTHER_SCRIPT_DOMINANT
+
+
 # A bilingual repository usually keeps the translation beside the README under
 # a name of its own. The search query asks for README.md by name, so these are
 # invisible to it -- but the root listing comes back in the same response, so
