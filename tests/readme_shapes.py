@@ -122,6 +122,19 @@ def nothing_extracted_is_never_worse_than_before():
     expect(entry["purpose"], "an entry must not lose the purpose it had")
 
 
+def links_are_not_sentences():
+    """A table of providers and their URLs is Latin from end to end, but it
+    says nothing in English. Read as a section, it made a Chinese README look
+    bilingual, and the README was never sent to translation."""
+    table = CHINESE + (
+        "\n| 服务 | 申请地址 | 额度 | 费用 |\n|---|---|---|---|\n"
+        "| Google Gemini | https://makersuite.google.com/app/apikey | 有免费额度 | 免费 |\n"
+        "| ChatGPT | https://platform.openai.com/api-keys | 付费 | — |\n"
+    )
+    expect(extract.english_blocks(table) == "", extract.english_blocks(table))
+    expect(build.needs_translation(repo(table)), "a Chinese README must reach translation")
+
+
 CASES = [
     ("an English README is left alone", english_readme_is_left_alone),
     ("a translation is preferred and named", a_translation_is_preferred_and_named),
@@ -130,6 +143,7 @@ CASES = [
     ("an English description beats a Chinese purpose", an_english_description_beats_a_chinese_purpose),
     ("a Chinese description displaces nothing", a_chinese_description_does_not_displace_anything),
     ("extracting nothing is never worse than before", nothing_extracted_is_never_worse_than_before),
+    ("links are not sentences", links_are_not_sentences),
 ]
 
 

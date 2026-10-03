@@ -184,7 +184,10 @@ def _is_prose(line):
     body = LIST_MARKUP_RE.sub("", line.strip())
     if NOT_PROSE_RE.match(body):
         return False
-    return len(PROSE_WORD_RE.findall(body)) >= PROSE_WORDS
+    # A URL is words to the regex and none to a reader: a Chinese table row
+    # naming a service and its sign-up link counted five, two such rows made an
+    # English section, and xray-zh.koplugin never reached translation.
+    return len(PROSE_WORD_RE.findall(URL_RE.sub(" ", body))) >= PROSE_WORDS
 
 
 def english_blocks(readme):
