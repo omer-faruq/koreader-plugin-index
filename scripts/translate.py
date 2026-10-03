@@ -2,7 +2,8 @@
 
 The one place in the pipeline where a model runs, and fenced accordingly. A
 repository that documents itself only in Chinese or Russian scores zero against
-every English query, and the rules in extract.py can do nothing about that --
+every English query, one written only in French or German next to nothing, and
+the rules in extract.py can do nothing about either --
 no rule turns a monolingual document into another language. The glossary adds
 labels; this adds the document.
 

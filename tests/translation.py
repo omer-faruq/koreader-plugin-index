@@ -53,6 +53,32 @@ PLAIN_ENGLISH = (
     "# Tool\n\n"
     "An ordinary English readme that says plainly what the plugin does for you.\n"
 )
+FRENCH = (
+    "# Move to (KOReader)\n\n"
+    "Plugin KOReader qui ajoute **Envoyer vers…** au menu d’appui long du "
+    "navigateur de fichiers, pour déplacer un fichier ou un dossier vers un "
+    "répertoire cible configuré.\n\n"
+    "## Utilisation\n\n"
+    "1. Appui long sur un fichier ou un dossier\n"
+    "2. Confirmer le déplacement\n\n"
+    "Le déplacement met à jour les sidecars, l’historique et les collections.\n"
+)
+BILINGUAL_FRENCH = FRENCH + (
+    "\n## English\n\n"
+    "Adds **Send to…** to the long-press menu of the file browser, so a file or "
+    "a folder can be moved to a target directory you choose once.\n"
+    "The move updates the sidecars, the history and the collections, just like "
+    "cut and paste does.\n"
+)
+# English that carries the words a careless vote would misread: "per" and
+# "com" in a URL, MIT, a Lua fence full of `and` and `for`, a French name.
+TRICKY_ENGLISH = (
+    "# Spacing\n\n"
+    "Per-book paragraph spacing for KOReader, inspired by Le Monde des Livres. "
+    "See https://example.com/de/la/docs for the details.\n\n"
+    "```lua\nfor i = 1, n do if a and b then end end\n```\n\n"
+    "Licensed under the MIT licence.\n"
+)
 
 CURATION = {"plugins": {}, "patches": {}, "distinctions": [], "glossary": {}}
 
@@ -155,6 +181,20 @@ def other_scripts_count_too():
     translator = Scripted()
     run([repo(RUSSIAN)], translator=translator)
     expect(len(translator.asked) == 1, "a Russian README is as unreadable as a Chinese one")
+
+
+def other_languages_in_latin_letters_count_too():
+    """A French README tokenises, and still matches no English query: "move
+    a file to a folder" finds nothing in "déplacer un fichier vers un dossier"."""
+    translator = Scripted()
+    run([repo(FRENCH), repo(BILINGUAL_FRENCH, name="o/bilingual"),
+         repo(TRICKY_ENGLISH, name="o/tricky")], translator=translator)
+    expect(len(translator.asked) == 1, f"asked for {len(translator.asked)}")
+    expect("déplacer" in translator.asked[0], translator.asked)
+    expect(extract.foreign_script("Plugin para la gestión de un Todo.txt en KOReader"),
+           "a one-line Spanish description is not English either")
+    source, _ = translate.source_text(FRENCH)
+    expect(not translate.acceptable(source, source), "a French echo is not a translation")
 
 
 def an_unchanged_readme_is_not_paid_for_twice():
@@ -380,6 +420,7 @@ CASES = [
     ("a new README_en retires the translation", a_new_readme_en_retires_the_translation),
     ("English is left alone, and stars do not matter", english_is_left_alone_and_stars_do_not_matter),
     ("other scripts count too", other_scripts_count_too),
+    ("other languages in Latin letters count too", other_languages_in_latin_letters_count_too),
     ("an unchanged README is not paid for twice", an_unchanged_readme_is_not_paid_for_twice),
     ("a stored translation survives a night without the service", a_stored_translation_survives_a_night_without_the_service),
     ("an unavailable service stops asking, not the build", an_unavailable_service_stops_asking_but_not_the_build),

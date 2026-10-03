@@ -82,21 +82,65 @@ OTHER_SCRIPT_RE = re.compile(
     "[\u0370-\u03ff\u0400-\u052f\u0590-\u05ff\u0600-\u06ff\u0900-\u097f\u0e00-\u0e7f]")
 OTHER_SCRIPT_DOMINANT = 0.5
 
+# Latin letters are not English either. A French README tokenises, but "move a
+# file to a folder" matches nothing in "déplacer un fichier vers un dossier", so
+# it is as far from an English query as a Chinese one. Telling the two apart
+# needs no model: function words are what every sentence is made of and what no
+# two languages share, so counting them is a vote. Words that are also English
+# ("per", "die", "in", "on", "a", "plus") or that markup and boilerplate are
+# full of ("mit" from the MIT licence, "com" from URLs) are left out of both
+# lists; code fences are cleaned away first, since Lua is all `and` and `for`.
+#
+# Measured on the September 2026 catalogue, the two populations do not touch:
+# READMEs in one language other than English keep at most 14% of these votes
+# for English, and those with an English section beside another start at 39%.
+ENGLISH_WORDS = frozenset(
+    "the and of to is are with for this that you your from it be can will "
+    "which when by an has have not was all".split())
+OTHER_WORDS = frozenset("""
+    le la les des du une est et pour dans avec sur pas qui vous votre cette au aux sont ou être
+    el los las del una es para con por que como está más al
+    um uma não em da dos das você
+    il gli della delle di è sono che
+    der das und ist für nicht ein eine den dem zu auf sie ich sich wird auch oder wenn
+    het een en van voor niet te
+    och att är för som på av till inte det og ikke jeg
+    się jest nie dla że
+    bir bu ile için olarak değil
+    dan yang untuk dengan ini dari
+    của và là các những cho trong được có không
+""".split())
+LATIN_WORD_RE = re.compile(r"[^\W\d_]+")
+URL_RE = re.compile(r"\S+://\S+|\bwww\.\S+")
+ENGLISH_VOTE_MIN = 0.25
+# Two votes at least, so that "Le Monde reader" stays English, while a one-line
+# description such as "Plugin para la gestión de un Todo.txt" does not.
+OTHER_VOTES_MIN = 2
+
+
+def foreign_language(text):
+    """Whether Latin-script text is written in a language other than English."""
+    words = LATIN_WORD_RE.findall(URL_RE.sub(" ", clean_markdown(text or "")).lower())
+    english = sum(w in ENGLISH_WORDS for w in words)
+    other = sum(w in OTHER_WORDS for w in words)
+    return other >= OTHER_VOTES_MIN and english < (english + other) * ENGLISH_VOTE_MIN
+
 
 def foreign_script(text):
     """Whether no English query can read this text at all.
 
     Wider than cjk_ratio, which the extraction rules are tuned on and keep
     using: this only decides whether a README is worth sending to translation
-    and whether what comes back is English. A German or Spanish README is out
-    of its reach -- the scorer at least tokenises those, and telling them from
-    English takes a language model, which is what this is trying not to spend.
+    and whether what comes back is English. The name predates its last test,
+    foreign_language, which also catches French or Spanish in Latin letters.
     """
     if cjk_ratio(text) >= CJK_DOMINANT:
         return True
     other = len(OTHER_SCRIPT_RE.findall(text or ""))
     latin = len(LATIN_RE.findall(text or ""))
-    return bool(other) and other / (other + latin) >= OTHER_SCRIPT_DOMINANT
+    if other and other / (other + latin) >= OTHER_SCRIPT_DOMINANT:
+        return True
+    return foreign_language(text)
 
 
 # A bilingual repository usually keeps the translation beside the README under

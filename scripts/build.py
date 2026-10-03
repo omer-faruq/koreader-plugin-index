@@ -216,7 +216,8 @@ def translation_backlog(previous, details, have, cache, limit=TRANSLATE_PER_RUN)
 
     Judged from the published excerpt, since the README itself is not in hand:
     the excerpt is the cleaned README, and where it is still in another script
-    with no English section and no README_en behind it, so is the document.
+    or language with no English section and no README_en behind it, so is
+    the document.
     One the model refused is left out until its README changes -- asking again
     every night would get the same answer and hold a slot doing it.
     """
