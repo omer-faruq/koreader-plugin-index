@@ -135,6 +135,23 @@ def links_are_not_sentences():
     expect(build.needs_translation(repo(table)), "a Chinese README must reach translation")
 
 
+def a_badge_url_may_hold_parentheses():
+    """shields.io takes colours as rgb(r,g,b), so a badge URL can close a
+    parenthesis of its own. Ending the URL there left the rest of every badge
+    behind as text, and ink-away.koplugin's purpose became four copies of
+    "&color=rgb(255%2C255%2C255))"."""
+    badges = "".join(
+        f"[![{name}](https://img.shields.io/badge/{name}-x-white?labelColor=rgb(159%2C%20214%2C%20101)"
+        f"&color=rgb(255%2C255%2C255))](https://example.com/{name})\n"
+        for name in ("Release", "Downloads"))
+    readme = badges + "\n\nInk Away is a drawing, notes and book annotation app for KOReader.\n"
+    entry, detail, _ = built(readme)
+    expect(entry["purpose"].startswith("Ink Away is"), entry["purpose"])
+    expect("rgb(" not in detail["readme_excerpt"], detail["readme_excerpt"])
+    expect(extract.clean_markdown("see [the docs](https://en.wikipedia.org/wiki/Ink_(disambiguation)) here")
+           == "see the docs here", "a link must keep its text and lose its whole URL")
+
+
 CASES = [
     ("an English README is left alone", english_readme_is_left_alone),
     ("a translation is preferred and named", a_translation_is_preferred_and_named),
@@ -144,6 +161,7 @@ CASES = [
     ("a Chinese description displaces nothing", a_chinese_description_does_not_displace_anything),
     ("extracting nothing is never worse than before", nothing_extracted_is_never_worse_than_before),
     ("links are not sentences", links_are_not_sentences),
+    ("a badge URL may hold parentheses", a_badge_url_may_hold_parentheses),
 ]
 
 

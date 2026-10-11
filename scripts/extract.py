@@ -12,9 +12,14 @@ import re
 
 # --------------------------------------------------------------------- markdown
 
-BADGE_RE = re.compile(r"^\s*[\[!]{1,2}\[[^\]]*\]\([^)]*\)\s*$")
-IMAGE_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
-LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+# A link target, allowing one level of parentheses inside it. shields.io takes
+# colours as rgb(r,g,b), and ending the URL at the first ")" left the rest of
+# each badge behind as text: ink-away.koplugin's purpose was four copies of
+# "&color=rgb(255%2C255%2C255))".
+URL_TARGET = r"\((?:[^()\s]|\([^()\s]*\))*\)"
+BADGE_RE = re.compile(r"^\s*[\[!]{1,2}\[[^\]]*\]" + URL_TARGET + r"\s*$")
+IMAGE_RE = re.compile(r"!\[[^\]]*\]" + URL_TARGET)
+LINK_RE = re.compile(r"\[([^\]]*)\]" + URL_TARGET)
 HTML_RE = re.compile(r"<[^>]+>")
 COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 CODE_FENCE_RE = re.compile(r"```.*?```", re.DOTALL)
