@@ -48,6 +48,15 @@
   }
   main { max-width: 32rem; text-align: center; }
   p { margin: 0 0 1rem; }
+  /* The finder's frame is a pixel wide. Centred and padded, the text would
+     sit outside it, the frame would never paint anything contentful, and the
+     beacon would report a first contentful paint of zero -- which, since its
+     October 2026 release, Cloudflare's dashboard quietly drops. So in a frame
+     that small the text moves into the corner the frame can see. */
+  @media (max-width: 8px) {
+    body { display: block; padding: 0; min-height: 0; }
+    main { text-align: left; }
+  }
 </style>
 </head>
 <body>
@@ -62,7 +71,33 @@
      paths, and the dashboard tells them apart by path. A second token would
      split the site across two dashboards and make the ratio -- the only part
      of this worth reading -- something you had to work out by hand. -->
-<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "6efd8a24464042b5a0a81dfe296b7b8d"}'></script>
+<!-- Loaded only once the page has painted, not straight from a tag. The beacon
+     sends at the load event along with the first contentful paint, and this
+     page is so small, and the beacon so surely cached by the front page, that
+     the load event beats the first paint: the view goes out with a paint time
+     of zero, and Cloudflare stopped counting those in October 2026. Waiting
+     for the paint costs a direct visitor nothing they can see. The timeout is
+     for a browser that never reports one. -->
+<script>
+  (function () {
+    var started = false;
+    function start() {
+      if (started) return;
+      started = true;
+      var s = document.createElement("script");
+      s.type = "module";
+      s.src = "https://static.cloudflareinsights.com/beacon.min.js";
+      s.setAttribute("data-cf-beacon", '{"token": "6efd8a24464042b5a0a81dfe296b7b8d"}');
+      document.body.appendChild(s);
+    }
+    try {
+      new PerformanceObserver(function (list) {
+        if (list.getEntriesByName("first-contentful-paint").length) start();
+      }).observe({ type: "paint", buffered: true });
+    } catch (err) { start(); }
+    setTimeout(start, 3000);
+  })();
+</script>
 
 </body>
 </html>

@@ -1838,7 +1838,8 @@ function countQuestionAsked() {
     // find it empty; it does not need it, since the number wanted here is of
     // the path and not of where it was reached from.
     frame.setAttribute("referrerpolicy", "no-referrer");
-    frame.style.display = "none";
+    frame.style.cssText =
+      "position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0.01;pointer-events:none";
     // Relative, so this keeps working on a fork, on a local file and behind
     // whatever prefix the site is served under. No query string: the beacon
     // would strip one anyway, and adding one would only invite the belief
