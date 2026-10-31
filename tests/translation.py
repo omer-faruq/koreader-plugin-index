@@ -167,14 +167,30 @@ def a_new_readme_en_retires_the_translation():
     expect(detail.get("readme_source") == "README_en.md", detail)
 
 
-def english_is_left_alone_and_stars_do_not_matter():
-    """No threshold: the cap and the order are the only limit, and an
-    unstarred plugin is the one English search can least reach otherwise."""
+def english_is_left_alone_and_so_is_a_readme_under_the_floor():
+    """The star floor bounds what a year costs: a README under it is not
+    asked for, and not remembered either, so a star gained later is enough."""
     translator = Scripted()
-    run([repo(PLAIN_ENGLISH), repo(CHINESE, name="o/unstarred", stars=0)],
-        translator=translator)
+    nodes, cache, _ = run([repo(PLAIN_ENGLISH), repo(CHINESE, name="o/unstarred", stars=0),
+                           repo(CHINESE, name="o/four", stars=4),
+                           repo(CHINESE, name="o/five", stars=5)], translator=translator)
     expect(len(translator.asked) == 1, f"asked for {len(translator.asked)}")
+    expect(set(cache) == {"o/five"}, sorted(cache))
+    expect("readmeTranslated" not in nodes["o/four"], "nothing is attached under the floor")
     expect(not extract.foreign_script(PLAIN_ENGLISH), "the English one is never sent")
+    _, cache, _ = run([repo(CHINESE, name="o/four", stars=4)], translator=Scripted(), min_stars=4)
+    expect(set(cache) == {"o/four"}, "the floor is a parameter, and inclusive")
+
+
+def a_translation_already_made_is_kept_under_the_floor():
+    """A repository can lose stars, or the floor can be raised: either way
+    the translation is paid for, and a reader is better off with it."""
+    _, cache, _ = run([repo(CHINESE, name="o/was-starred", stars=5)], translator=Scripted())
+    translator = Scripted()
+    nodes, cache, released = run([repo(CHINESE, name="o/was-starred", stars=1)], cache, translator)
+    expect(not translator.asked, "a stored translation costs nothing to reuse")
+    expect(nodes["o/was-starred"].get("readmeTranslated", {}).get("text") == ENGLISH, "and is attached")
+    expect(not released, "it is still needed")
 
 
 def other_scripts_count_too():
@@ -302,6 +318,8 @@ def the_backlog_is_worked_through_between_full_builds():
     got = build.translation_backlog(previous, details, have, cache, limit=2)
     expect(got == ["o/waiting-big", "o/waiting-mid"], got)
     got = build.translation_backlog(previous, details, have, cache)
+    expect(got == ["o/waiting-big", "o/waiting-mid"], f"{got}: the unstarred one is under the floor")
+    got = build.translation_backlog(previous, details, have, cache, min_stars=0)
     expect(got == ["o/waiting-big", "o/waiting-mid", "o/waiting-small"], got)
 
 
@@ -418,7 +436,8 @@ CASES = [
     ("the author's English description stays the purpose", the_authors_english_description_stays_the_purpose),
     ("an author's translation is never replaced", an_authors_translation_is_never_replaced),
     ("a new README_en retires the translation", a_new_readme_en_retires_the_translation),
-    ("English is left alone, and stars do not matter", english_is_left_alone_and_stars_do_not_matter),
+    ("English is left alone, and so is a README under the floor", english_is_left_alone_and_so_is_a_readme_under_the_floor),
+    ("A translation already made is kept under the floor", a_translation_already_made_is_kept_under_the_floor),
     ("other scripts count too", other_scripts_count_too),
     ("other languages in Latin letters count too", other_languages_in_latin_letters_count_too),
     ("an unchanged README is not paid for twice", an_unchanged_readme_is_not_paid_for_twice),

@@ -52,9 +52,11 @@ reasoning happens on the consumer's side, with their own tools.
 One exception, fenced off in `scripts/translate.py`: a README with no English
 anywhere in it — no `README_en.md`, no English section — is machine-translated,
 whether it is written in Chinese or Cyrillic or in French or German,
-at most thirty a run, most-starred first. It runs on DeepSeek from a prepaid
-balance, with the key in the `TRANSLATE_API_KEY` secret; the balance is the
-spending cap, and without the key the build runs and translates nothing. Each
+at most thirty a run, most-starred first, and only once the repository has
+five stars: under that nothing is asked, which is most of what arrives. It
+runs on DeepSeek from a prepaid balance, with the key in the
+`TRANSLATE_API_KEY` secret; the balance is the spending cap, and without the
+key the build runs and translates nothing. Each
 translation is made once, reused until the README changes, dropped as soon as
 the author publishes English of their own, and labelled "no English README ·
 machine-translated" wherever it shows.

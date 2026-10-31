@@ -178,12 +178,17 @@ def attach_english_readmes(client, nodes):
             print(f"    {node['nameWithOwner']}: {name}")
 
 
-# New translations per run, most-starred first, and the only limit there is.
-# No star threshold: an unstarred plugin documented in Chinese is exactly the
-# one no English search can otherwise reach, and the order already puts the
-# quota where readers are. The backlog in September 2026 was about a hundred,
-# so a few nights clear it; after that a night sees one or two.
+# New translations per run, most-starred first, and a floor under which none
+# is asked for. The floor is what makes the prepaid balance last: of the 126
+# READMEs translated by October 2026, 105 belonged to repositories with fewer
+# than five stars, so the floor cuts what a year costs to a sixth, and a
+# README nobody has starred is the one a translation reaches fewest readers
+# through. A translation already made is reused below the floor all the same;
+# it is paid for, and dropping it would buy nothing. The per-run cap is the
+# other bound: the backlog in September 2026 was about a hundred, so a few
+# nights cleared it; after that a night sees one or two.
 TRANSLATE_PER_RUN = 30
+TRANSLATE_MIN_STARS = 5
 
 
 def needs_translation(node):
@@ -206,7 +211,8 @@ def needs_translation(node):
     return extract.foreign_script(view)
 
 
-def translation_backlog(previous, details, have, cache, limit=TRANSLATE_PER_RUN):
+def translation_backlog(previous, details, have, cache, limit=TRANSLATE_PER_RUN,
+                        min_stars=TRANSLATE_MIN_STARS):
     """Carried-over plugins still waiting for a translation, most-starred first.
 
     A diff run only rebuilds what was pushed in the last day or two, so without
@@ -219,12 +225,15 @@ def translation_backlog(previous, details, have, cache, limit=TRANSLATE_PER_RUN)
     or language with no English section and no README_en behind it, so is
     the document.
     One the model refused is left out until its README changes -- asking again
-    every night would get the same answer and hold a slot doing it.
+    every night would get the same answer and hold a slot doing it. One under
+    the star floor is left out too: fetching it would only find that out.
     """
     pending = []
     for old in previous:
         pid = old["id"]
         if pid in have or old.get("machine_translated") or (cache.get(pid) or {}).get("refused"):
+            continue
+        if old.get("stars", 0) < min_stars:
             continue
         detail = details.get(pid) or {}
         excerpt = detail.get("readme_excerpt") or ""
@@ -237,7 +246,7 @@ def translation_backlog(previous, details, have, cache, limit=TRANSLATE_PER_RUN)
 
 
 def attach_translations(nodes, cache, translator=None, limit=TRANSLATE_PER_RUN,
-                        model=translate.MODEL):
+                        min_stars=TRANSLATE_MIN_STARS, model=translate.MODEL):
     """Give every repository that needs one a translation, reusing what it can.
 
     `cache` is the previous run's translations.json, keyed by id, and is
@@ -247,7 +256,9 @@ def attach_translations(nodes, cache, translator=None, limit=TRANSLATE_PER_RUN,
 
     `translator` takes source text and returns English. None means no
     translating this run -- a stored translation is still used, since it is
-    already paid for. A translator that raises Unavailable is dropped for the
+    already paid for, and so is one whose repository has since dropped under
+    `min_stars`; only a new request needs the stars. A translator that raises
+    Unavailable is dropped for the
     rest of the run. Refused is remembered against the text, and not asked
     again until the README changes. Any other exception loses only that
     repository, which the next run will ask for again, until three in a row
@@ -265,7 +276,7 @@ def attach_translations(nodes, cache, translator=None, limit=TRANSLATE_PER_RUN,
     # Most-read first, so a cap or a spent quota costs the long tail.
     wanted.sort(key=lambda n: -n.get("stargazerCount", 0))
 
-    reused = fresh = waiting = refused = asked = failed_in_row = 0
+    reused = fresh = waiting = refused = asked = failed_in_row = unstarred = 0
     for node in wanted:
         key = node["nameWithOwner"]
         text, partial = translate.source_text(readme_of(node)[0])
@@ -275,6 +286,11 @@ def attach_translations(nodes, cache, translator=None, limit=TRANSLATE_PER_RUN,
             refused += 1
             continue
         if not (held and held.get("source_sha") == digest):
+            # Under the floor, nothing is asked and nothing is held: the next
+            # run looks again, and a star gained since is enough.
+            if node.get("stargazerCount", 0) < min_stars:
+                unstarred += 1
+                continue
             # The cap counts requests, refused ones included: it is there to
             # bound what a run spends, not what it gets back.
             if translator is None or asked >= limit:
@@ -328,8 +344,8 @@ def attach_translations(nodes, cache, translator=None, limit=TRANSLATE_PER_RUN,
 
     if wanted or released:
         print(f"  {len(wanted)} READMEs have no English: {reused} translations reused, "
-              f"{fresh} new, {refused} refused, {waiting} waiting; "
-              f"{len(released)} no longer needed")
+              f"{fresh} new, {refused} refused, {waiting} waiting, "
+              f"{unstarred} under {min_stars} stars; {len(released)} no longer needed")
     return released
 
 
